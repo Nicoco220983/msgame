@@ -8,9 +8,9 @@ const { randge, range, bound } = MSG
 // main
 
 function startGame() {
-    const canvas = MSG.createCanvas(WIDTH, HEIGHT, { fitWindow: true })
-    document.body.appendChild(canvas)
-    const game = new StarterGame(canvas)
+    const can = document.createElement("canvas")
+    document.body.appendChild(can)
+    const game = new ExampleGame(can, { width:WIDTH, height:HEIGHT, fitTo:document.body })
     game.initLoop()
 }
 
@@ -24,7 +24,7 @@ const DURATION = 15
 
 const VOLUME_LEVEL = 0.3
 
-class StarterGame extends Game {
+class ExampleGame extends Game {
     constructor(...args) {
         super(...args)
         this.paused = false
@@ -38,7 +38,7 @@ class StarterGame extends Game {
         })
     }
     start() {
-        this.scene = new StarterScene(this)
+        this.scene = new ExampleScene(this)
     }
     update(dt) {
         if(this.paused) {
@@ -67,7 +67,7 @@ class StarterGame extends Game {
 
 // scene
 
-class StarterScene extends Scene {
+class ExampleScene extends Scene {
     constructor(...args) {
         super(...args)
         this.viewY = 0
@@ -96,7 +96,7 @@ class StarterScene extends Scene {
         super.update(dt)
         if (this.state == "ONGOING") {
             this.viewY -= RUN_SPD * dt
-            StarterScene.updaters.forEach(fn => fn(this))
+            ExampleScene.updaters.forEach(fn => fn(this))
             for(let name of ["sprites", "backSprites", "fixedSprites"])
                 this[name].forEach(s => s.update(dt))
             for(let name of ["sprites", "backSprites"])
@@ -117,7 +117,7 @@ class StarterScene extends Scene {
         this.state = "START"
         this.addIntroSprites()
         this.on("click", () => this.ongoing())
-        StarterScene.starters.forEach(fn => fn(this))
+        ExampleScene.starters.forEach(fn => fn(this))
     }
     addIntroSprites() {
         this.introSprites = []
@@ -149,7 +149,7 @@ class StarterScene extends Scene {
     ongoing() {
         if (this.state != "START") return
         this.state = "ONGOING"
-        StarterScene.ongoers.forEach(fn => fn(this))
+        ExampleScene.ongoers.forEach(fn => fn(this))
         const aud = new Aud('./assets/music.mp3')
         MSG.waitLoads(aud).then(() => aud.replay({ baseVolume: .2, loop: true }))
         this.on("remove", () => aud.pause())
@@ -184,14 +184,13 @@ class StarterScene extends Scene {
         })
     }
 }
-StarterScene.starters = []
-StarterScene.ongoers = []
-StarterScene.updaters = []
+ExampleScene.starters = []
+ExampleScene.ongoers = []
+ExampleScene.updaters = []
 
 function removeIfOut(sprite) {
     const scn = sprite.scene
     if((sprite.y - sprite.height) > ( scn.viewY + scn.height)) {
-        console.log("removed")
         sprite.remove()
     }
 }
@@ -270,7 +269,7 @@ Notif.prototype.anchorY = 1
 
 // time
 
-StarterScene.ongoers.push(scn => {
+ExampleScene.ongoers.push(scn => {
     scn.time = 0
     scn.addFixed(Text, {
         x: 10,
@@ -287,7 +286,7 @@ const TilesAnim = new Anim('./assets/tiles.png')
 
 let LastTilesSprite
 
-StarterScene.starters.push(scn => {
+ExampleScene.starters.push(scn => {
     const nbTilesY = HEIGHT / TILES_FRAME_SIZE
     for (let j = nbTilesY; j >= 0; --j) {
         createTilesRow(scn, {
@@ -296,7 +295,7 @@ StarterScene.starters.push(scn => {
     }
 })
 
-StarterScene.updaters.push(scn => {
+ExampleScene.updaters.push(scn => {
     if (LastTilesSprite.y > -TILES_FRAME_SIZE+scn.viewY)
         createTilesRow(scn, {
             y: LastTilesSprite.y - TILES_FRAME_SIZE
@@ -353,7 +352,7 @@ class Hero extends Sprite {
     }
 }
 
-StarterScene.starters.push(scn => {
+ExampleScene.starters.push(scn => {
     scn.hero = scn.add(Hero, {
         x: scn.width / 2,
         y: HERO_Y,
@@ -381,7 +380,7 @@ StarterScene.starters.push(scn => {
     }
 })
 
-StarterScene.ongoers.push(scn => {
+ExampleScene.ongoers.push(scn => {
     const game = scn.game, hero = scn.hero
     hero.anim = HeroAnims.run
     hero.on("update", function (dt) {
@@ -404,7 +403,7 @@ StarterScene.ongoers.push(scn => {
 
 // score
 
-StarterScene.ongoers.push(scn => {
+ExampleScene.ongoers.push(scn => {
     scn.score = 10
     scn.addFixed(Text, {
         x: 10,
@@ -420,7 +419,7 @@ const ENEMY_SIZE = 40
 
 const EnemyAnim = new Anim('./assets/enemy.png')
 
-StarterScene.updaters.push(scn => {
+ExampleScene.updaters.push(scn => {
     if (scn.time > DURATION) return
     const nextTime = scn.enemyNextTime || 0
     if (scn.time > nextTime) {
@@ -453,4 +452,4 @@ function createEnemy(scn) {
 
 // start
 
-startGame()
+document.body.onload = startGame

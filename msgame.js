@@ -62,20 +62,6 @@ export class Pool {
     }
 }
 
-// canvas
-
-export function createCanvas(width, height, kwargs) {
-    const can = _createCan(width, height)
-    if (kwargs && kwargs.fitWindow) {
-        const canWoH = width / height
-        const winW = window.innerWidth, winH = window.innerHeight
-        const winWoH = winW / winH
-        can.style.width = ((canWoH > winWoH) ? winW : floor(winH * canWoH)) + "px"
-        can.style.height = ((canWoH > winWoH) ? floor(winW / canWoH) : winH) + "px"
-    }
-    return can
-}
-
 // elem
 
 class Elem {
@@ -149,9 +135,10 @@ export class Game extends Elem {
     constructor(canvas, kwargs) {
         super()
         this.canvas = canvas
-        this.width = canvas.width
-        this.height = canvas.height
         Object.assign(this, kwargs)
+        canvas.width = this.width
+        canvas.height = this.height
+        if(kwargs.fitTo) this.fitCanvasTo(kwargs.fitTo)
         // focus
         document.addEventListener("focus", () => this.trigger("focus"))
         document.addEventListener("blur", () => this.trigger("blur"))
@@ -182,6 +169,13 @@ export class Game extends Elem {
             this.pointer.y = pos.y
             this.pointer.trigger("move")
         })
+    }
+    fitCanvasTo(el) {
+        const WoH = this.width / this.height
+        const elW = el.clientWidth, elH = el.clientHeight
+        const elWoH = elW / elH
+        this.canvas.style.width = ((WoH > elWoH) ? elWoH : floor(elH * WoH)) + "px"
+        this.canvas.style.height = ((WoH > elWoH) ? floor(elWoH / WoH) : elH) + "px"
     }
     async initLoop() {
         await waitLoads()
