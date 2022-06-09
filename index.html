@@ -7,7 +7,6 @@
     <meta property="og:title" content="msgame starter" />
     <meta property="og:description" content="Starter pour le game framework msgame.js" />
     <meta property="og:image" content="http://www.mysite.com/mini.jpg" />
-    <script type="module" src="example.js"></script>
     <style>
         html, body {
             background: black;
@@ -23,9 +22,18 @@
             background: white;
         }
     </style>
+    <script type="module">
+        import { ExampleGame } from './example.js'
+        document.body.onload = () => {
+            const can = document.body.querySelector("canvas")
+            const game = new ExampleGame(can, { fitTo:document.body })
+            game.initLoop()
+        }
+    </script>
 </head>
 
 <body>
+    <canvas></canvas>
 </body>
 
 </html>

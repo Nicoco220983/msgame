@@ -5,15 +5,6 @@ import * as MSG from './msgame.js'
 const { Game, Scene, Sprite, SpriteSheet, Anim, Text, Aud } = MSG
 const { randge, range, bound } = MSG
 
-// main
-
-function startGame() {
-    const can = document.createElement("canvas")
-    document.body.appendChild(can)
-    const game = new ExampleGame(can, { width:WIDTH, height:HEIGHT, fitTo:document.body })
-    game.initLoop()
-}
-
 // game
 
 const WIDTH = 400, HEIGHT = 600
@@ -24,9 +15,13 @@ const DURATION = 15
 
 const VOLUME_LEVEL = 0.3
 
-class ExampleGame extends Game {
-    constructor(...args) {
-        super(...args)
+export class ExampleGame extends Game {
+    constructor(canvas, kwargs) {
+        super(canvas, {
+            width: WIDTH,
+            height: HEIGHT,
+            ...kwargs
+        })
         this.paused = false
         document.addEventListener("focus", () => this.pause(false))
         document.addEventListener("blur", () => this.pause(true))
@@ -150,7 +145,7 @@ class ExampleScene extends Scene {
         if (this.state != "START") return
         this.state = "ONGOING"
         ExampleScene.ongoers.forEach(fn => fn(this))
-        const aud = new Aud('./assets/music.mp3')
+        const aud = new Aud(absPath('assets/music.mp3'))
         MSG.waitLoads(aud).then(() => aud.replay({ baseVolume: .2, loop: true }))
         this.on("remove", () => aud.pause())
     }
@@ -226,7 +221,7 @@ let volumeMuted = false
 
 MSG.setVolumeLevel(VOLUME_LEVEL)
 
-const volumeSS = new SpriteSheet('./assets/volume.png', {
+const volumeSS = new SpriteSheet(absPath('assets/volume.png'), {
     frameWidth: 50,
     frameHeight: 50
 })
@@ -282,7 +277,7 @@ ExampleScene.ongoers.push(scn => {
 
 const TILES_FRAME_SIZE = 50
 
-const TilesAnim = new Anim('./assets/tiles.png')
+const TilesAnim = new Anim(absPath('assets/tiles.png'))
 
 let LastTilesSprite
 
@@ -327,7 +322,7 @@ const HERO_Y = 500
 const HERO_SIZE = 50
 const SPDMAX = 2000, ACC = 2000, DEC = 2000
 
-const heroSS = new SpriteSheet('./assets/hero.png', {
+const heroSS = new SpriteSheet(absPath('assets/hero.png'), {
     frameWidth: 30,
     frameHeight: 30
 })
@@ -338,7 +333,7 @@ const HeroAnims = {
     aouch: new Anim(heroSS.getFrame(4)),
 }
 
-const ouchAud = new Aud('./assets/ouch.mp3', { baseVolume: .2 })
+const ouchAud = new Aud(absPath('assets/ouch.mp3'), { baseVolume: .2 })
 
 class Hero extends Sprite {
     constructor(...args) {
@@ -417,7 +412,7 @@ ExampleScene.ongoers.push(scn => {
 
 const ENEMY_SIZE = 40
 
-const EnemyAnim = new Anim('./assets/enemy.png')
+const EnemyAnim = new Anim(absPath('assets/enemy.png'))
 
 ExampleScene.updaters.push(scn => {
     if (scn.time > DURATION) return
@@ -450,6 +445,9 @@ function createEnemy(scn) {
     }
 }
 
-// start
+// utils
 
-document.body.onload = startGame
+function absPath(relPath){
+    const url = new URL(relPath, import.meta.url)
+    return url.pathname
+}
