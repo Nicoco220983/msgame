@@ -16,12 +16,8 @@ const DURATION = 15
 const VOLUME_LEVEL = 0.3
 
 export class ExampleGame extends Game {
-    constructor(canvas, kwargs) {
-        super(canvas, {
-            width: WIDTH,
-            height: HEIGHT,
-            ...kwargs
-        })
+    constructor(...args) {
+        super(...args)
         this.paused = false
         document.addEventListener("focus", () => this.pause(false))
         document.addEventListener("blur", () => this.pause(true))
@@ -59,6 +55,8 @@ export class ExampleGame extends Game {
         MSG.pauseAudios(val)
     }
 }
+ExampleGame.prototype.width = WIDTH
+ExampleGame.prototype.height = HEIGHT
 
 // scene
 
@@ -87,6 +85,12 @@ class ExampleScene extends Scene {
         this.fixedSprites.push(sprite)
         return sprite
     }
+    initHero(){
+        this.hero = this.add(Hero, {
+            x: this.width / 2,
+            y: HERO_Y,
+        })
+    }
     update(dt) {
         super.update(dt)
         if (this.state == "ONGOING") {
@@ -112,6 +116,7 @@ class ExampleScene extends Scene {
         this.state = "START"
         this.addIntroSprites()
         this.on("click", () => this.ongoing())
+        this.initHero()
         ExampleScene.starters.forEach(fn => fn(this))
     }
     addIntroSprites() {
@@ -338,26 +343,21 @@ const ouchAud = new Aud(absPath('assets/ouch.mp3'), { baseVolume: .2 })
 class Hero extends Sprite {
     constructor(...args) {
         super(...args)
+        this.y = HERO_Y
         this.anim = HeroAnims.ready
         this.width = HERO_SIZE
         this.height = HERO_SIZE
         this.anchorX = ANCHOR_X
         this.anchorY = ANCHOR_Y
         this.dx = 0
+        this.damageTime = null
+        this.autoTransformImg = false
+        this.on("update", function() {
+            this.y = HERO_Y + this.scene.viewY
+        })
     }
-}
-
-ExampleScene.starters.push(scn => {
-    scn.hero = scn.add(Hero, {
-        x: scn.width / 2,
-        y: HERO_Y,
-        damageTime: null
-    })
-    scn.hero.autoTransformImg = false
-    scn.hero.on("update", function() {
-        this.y = HERO_Y + this.scene.viewY
-    })
-    scn.hero.damage = function (n) {
+    damage(n) {
+        const scn = this.scene
         scn.score -= n
         scn.addFixed(Notif, {
             x: this.x,
@@ -373,12 +373,7 @@ ExampleScene.starters.push(scn => {
         this.damageTime = this.time
         ouchAud.replay()
     }
-})
-
-ExampleScene.ongoers.push(scn => {
-    const game = scn.game, hero = scn.hero
-    hero.anim = HeroAnims.run
-    hero.on("update", function (dt) {
+    updAnim(dt){
         if(this.damageTime !== null && this.time < this.damageTime + 1) {
             this.anim = HeroAnims.aouch
             this.animAlpha = ((this.time - this.damageTime) / .2) % 1 < .5
@@ -386,12 +381,24 @@ ExampleScene.ongoers.push(scn => {
             this.anim = HeroAnims.run
             delete this.animAlpha
         }
-        if (game.pointer.isDown) {
-            this.dx = MSG.accToPos(this.x, game.pointer.x, this.dx, SPDMAX, ACC, DEC, dt)
+    }
+    applyPlayerControls(dt){
+        const pointer = this.scene.game.pointer
+        if (pointer.isDown) {
+            this.dx = MSG.accToPos(this.x, pointer.x, this.dx, SPDMAX, ACC, DEC, dt)
         } else {
             this.dx = MSG.accToSpd(this.dx, 0, ACC, DEC, dt)
         }
         this.x = bound(this.x + this.dx * dt, 25, WIDTH - 25)
+    }
+}
+
+ExampleScene.ongoers.push(scn => {
+    const game = scn.game, hero = scn.hero
+    hero.anim = HeroAnims.run
+    hero.on("update", function (dt) {
+        this.updAnim(dt)
+        this.applyPlayerControls(dt)
     })
 })
 
@@ -436,11 +443,12 @@ function createEnemy(scn) {
     })
     sprite.autoTransformImg = false
     sprite.on("update", function () {
-        if (MSG.collide(this, scn.hero)) this.onCollide()
+        if (MSG.collide(this, scn.hero))
+            this.onCollide(scn.hero)
     })
-    sprite.onCollide = function () {
+    sprite.onCollide = function (hero) {
         if(!this.collided)
-            scn.hero.damage(this.score)
+            hero.damage(this.score)
         this.collided = true
     }
 }
