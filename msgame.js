@@ -1,3 +1,4 @@
+const { assign } = Object
 const { abs, floor, ceil, min, max, sqrt, random: rand, cos, sin, atan2 } = Math
 const { log } = console
 
@@ -94,6 +95,10 @@ class Elem {
         }
     }
 
+    once(evt, callback) {
+        this.on(evt, () => { callback(); return false })
+    }
+
     off(evt, key) {
         if (evt === undefined) { delete this._events; return }
         let evts = this._events
@@ -116,6 +121,7 @@ class Elem {
     }
 
     remove() {
+        if(this.removed) return
         this.removed = true
         this.trigger("remove")
     }
@@ -132,17 +138,67 @@ class Elem {
 // Game
 
 export class Game extends Elem {
-    constructor(canvas, kwargs) {
+
+    constructor(parentEl, kwargs) {
         super()
-        this.canvas = canvas
-        Object.assign(this, kwargs)
-        canvas.width = this.width
-        canvas.height = this.height
-        if(kwargs.fitTo) this.fitCanvasTo(kwargs.fitTo)
+        this.set(kwargs)
+        this.initCanvas(parentEl)
+        this.initPointer()
         // focus
         document.addEventListener("focus", () => this.trigger("focus"))
         document.addEventListener("blur", () => this.trigger("blur"))
-        // pointer
+    }
+
+    set(kwargs) {
+        assign(this, kwargs)
+    }
+
+    // canvas
+
+    initCanvas(parentEl) {
+        const wrapEl = this.wrapEl = document.createElement("div")
+        assign(wrapEl.style, { position: "relative" })
+        const can = this.canvas = document.createElement("canvas")
+        assign(can, { width: this.width, height: this.height })
+        this.fitCanvasTo(this.fitTo || parentEl)
+        wrapEl.appendChild(can)
+        parentEl.appendChild(wrapEl)
+    }
+
+    fitCanvasTo(el) {
+        const WoH = this.width / this.height
+        const elW = el.offsetWidth || el.innerWidth
+        const elH = el.offsetHeight || el.innerHeight
+        const elWoH = elW / elH
+        this.canvas.style.width = floor((WoH > elWoH) ? elW : (elH * WoH)) + "px"
+        this.canvas.style.height = floor((WoH > elWoH) ? (elW / WoH) : elH) + "px"
+    }
+
+    // game loop 
+
+    async initLoop() {
+        await waitLoads()
+        this.start()
+        const timeFrame = 1 / this.fps
+        let dt = timeFrame
+        while (true) {
+            const now = Date.now()
+            this.update(dt)
+            this.draw(dt)
+            const elapsed = (Date.now() - now) / 1000
+            const toWait = max(0, timeFrame - elapsed)
+            await _wait(toWait * 1000)
+            dt = elapsed + toWait
+        }
+    }
+
+    start() {}
+
+    draw(dt) {}
+
+    // pointer
+
+    initPointer() {
         this.pointer = new Elem({ isDown: false })
         let lastPointerClickTime = null
         this.addPointerDownListener(pos => {
@@ -170,34 +226,6 @@ export class Game extends Elem {
             this.pointer.trigger("move")
         })
     }
-    fitCanvasTo(el) {
-        const WoH = this.width / this.height
-        const elW = el.clientWidth, elH = el.clientHeight
-        const elWoH = elW / elH
-        this.canvas.style.width = ((WoH > elWoH) ? elWoH : floor(elH * WoH)) + "px"
-        this.canvas.style.height = ((WoH > elWoH) ? floor(elWoH / WoH) : elH) + "px"
-    }
-    async initLoop() {
-        await waitLoads()
-        this.start()
-        const timeFrame = 1 / this.fps
-        let dt = timeFrame
-        while (true) {
-            const now = Date.now()
-            this.update(dt)
-            this.draw(dt)
-            const elapsed = (Date.now() - now) / 1000
-            const toWait = max(0, timeFrame - elapsed)
-            await _wait(toWait * 1000)
-            dt = elapsed + toWait
-        }
-    }
-
-    start() {}
-
-    draw(dt) {}
-
-    // pointer
 
     addPointerDownListener(next) {
         this._addPointerListerner(this.canvas, "mousedown", "touchstart", next)
@@ -231,7 +259,7 @@ export class Game extends Elem {
         }
     }
 }
-Object.assign(Game.prototype, {
+assign(Game.prototype, {
     fps: 60,
     dblClickDurarion: .3
 })
@@ -244,19 +272,48 @@ export class Scene extends Elem {
         this.game = game
         this.width = game.width
         this.height = game.height
-        Object.assign(this, kwargs)
+        this.set(kwargs)
         this.canvas = _createCan(this.width, this.height)
+        this.initCanvas()
+        this.sprites = []
+    }
+    set(kwargs) {
+        if(!kwargs) return
+        if(kwargs.removed) this.remove()
+        assign(this, kwargs)
+    }
+    initCanvas(){
+        const color = this.color || "white"
+        const ctx = this.canvas.getContext("2d")
+        ctx.fillStyle = color
+        ctx.fillRect(0, 0, this.width, this.height)
+    }
+    update(dt) {
+        super.update(dt)
+        this.sprites.forEach(s => s.update(dt))
+        this.sprites = this.sprites.filter(s => !s.removed)
     }
     drawTo(gameCtx, dt=0, viewX=0, viewY=0) {
         this.draw(dt)
         gameCtx.drawImage(this.canvas, ~~(this.x - viewX), ~~(this.y - viewY))
     }
-    draw(dt) {}
+    draw(dt) {
+        const ctx = this.canvas.getContext("2d")
+        this.sprites.forEach(s => s.drawTo(ctx, dt, 0, 0))
+    }
+    addSprite(cls, kwargs){
+        const res = new cls(this, kwargs)
+        this.sprites.push(res)
+        return res
+    }
+    remove() {
+        super.remove()
+        this.sprites.forEach(s => s.remove())
+    }
 }
-Object.assign(Scene.prototype, {
+assign(Scene.prototype, {
     x: 0,
     y: 0,
-    color: "white"
 })
 
 // Sprite
@@ -288,7 +345,13 @@ export class Sprite extends Elem {
     constructor(scn, kwargs) {
         super()
         this.scene = scn
-        Object.assign(this, kwargs)
+        this.game = scn.game
+        this.set(kwargs)
+    }
+
+    set(kwargs) {
+        if(kwargs.removed) this.remove()
+        assign(this, kwargs)
     }
 
     getBoundaries() {
@@ -343,9 +406,10 @@ export class Sprite extends Elem {
     }
 }
 
-Object.assign(Sprite.prototype, {
+assign(Sprite.prototype, {
     x: 0,
     y: 0,
+    z: 0,
     width: 50,
     height: 50,
     angle: 0,
@@ -381,7 +445,7 @@ export class SpriteSheet {
     constructor(src, kwargs) {
         this.src = src
         this.frames = []
-        Object.assign(this, kwargs)
+        assign(this, kwargs)
         this.load()
     }
     async load() {
@@ -414,7 +478,7 @@ export class Anim {
     constructor(imgs, kwargs) {
         this.imgs = _asArr(imgs).map(img => (typeof img === "string") ? new Img(img) : img)
         this.fps = 1
-        Object.assign(this, kwargs)
+        assign(this, kwargs)
     }
     getImg(time) {
         const imgs = this.imgs
@@ -451,7 +515,7 @@ export class Img extends Image {
     constructor(src, kwargs) {
         super()
         this.src = src
-        Object.assign(this, kwargs)
+        assign(this, kwargs)
         Loads.push(this)
         this.onload = () => this.loaded = true
         this.onerror = () => this.loadError = `load error: ${src}`
@@ -468,7 +532,7 @@ export class Aud extends Audio {
         super()
         this.src = src
         this.baseVolume = 1
-        Object.assign(this, kwargs)
+        assign(this, kwargs)
         this.syncVolume()
         this.setLoop(this.loop)
         Audios.push(this)
@@ -483,7 +547,7 @@ export class Aud extends Audio {
         if (!_getArg(kwargs, "force") && !this.playable()) return
         this.setLoop(_getArg(kwargs, "loop", false))
         this.currentTime = 0
-        Object.assign(this, kwargs)
+        assign(this, kwargs)
         this.syncVolume()
         this.play()
     }
@@ -502,6 +566,11 @@ export class Aud extends Audio {
             this.removeEventListener(this.loopListerner)
             delete this.loopListerner
         }
+    }
+    remove() {
+        this.pause()
+        const idx = Audios.indexOf(this)
+        if(idx !== -1) Audios.splice(idx, 1)
     }
 }
 
@@ -606,8 +675,15 @@ export function collide(s1, s2) {
 // text
 
 export class Text extends Sprite {
-    getAlignText() {
-        if (this.alignText) return this.alignText
+    getboundaryAlign() {
+        if (this.textAlign) return this.textAlign
+        const { anchorX } = this
+        if (anchorX === 0) return "left"
+        if (anchorX === 1) return "right"
+        return "center"
+    }
+    getTextAlign() {
+        if (this.textAlign) return this.textAlign
         const { anchorX } = this
         if (anchorX === 0) return "left"
         if (anchorX === 1) return "right"
@@ -630,7 +706,7 @@ export class Text extends Sprite {
             this.height = can.height = ceil(height)
             ctx.font = font
             ctx.fillStyle = this.color || "black"
-            ctx.textAlign = this.getAlignText()
+            ctx.textAlign = this.getTextAlign()
             ctx.textBaseline = "top"
             let x = 0
             if (ctx.textAlign === "center") x = floor(width / 2)
@@ -642,7 +718,81 @@ export class Text extends Sprite {
     }
 }
 
-Text.prototype.scaleImg = false
+// html
+
+export class HtmlSprite extends Sprite {
+    constructor(scn, kwargs) {
+        super(scn, kwargs)
+        this.html = toHtml(this.html)
+        assign(this.html.style, {
+            display: "block",
+            position: "absolute",
+        })
+        this.syncHtmlPos()
+        this.game.wrapEl.appendChild(this.html)
+    }
+    toHtmlPos(val, ref){
+        return `${floor(val/ref*100)}%`
+    }
+    syncHtmlPos(){
+        const scn = this.scene
+        const { x, y, width, height } = this.getBoundaries()
+        assign(this.html.style, {
+            left: this.toHtmlPos(x, scn.width),
+            top: this.toHtmlPos(y, scn.height),
+            width: this.toHtmlPos(width, scn.width),
+            height: this.toHtmlPos(height, scn.height),
+        })
+    }
+    remove(){
+        super.remove()
+        this.html.remove()
+    }
+}
+HtmlSprite.prototype.anim = null
+
+function toHtml(html) {
+    if(html instanceof HTMLElement) {
+        return html
+    } else if(typeof html === "string") {
+        const div = document.createElement("div")
+        div.innerHTML = html
+        return div.children[0]
+    } else throw "Bad type"
+}
+
+// input
+
+export class InputSprite extends HtmlSprite {
+    constructor(scn, kwargs) {
+        super(scn, {
+            html: "<input type='text' />",
+            ...kwargs
+        })
+        if(this.font) this.html.style.font = this.font
+        if(this.color) this.html.style.color = this.color
+        if(this.placeholder) this.html.setAttribute("placeholder", this.placeholder)
+        this.html.style.textAlign = this.getTextAlign()
+        this.html.style.fontSize = floor(this.html.offsetHeight*.5) + 'px'
+        this.html.addEventListener("keyup", evt => {
+            this.trigger("keyup", this.html.value)
+            if(evt.key === "Enter") this.onValue(this.html.value)
+        })
+        if(this.value) this.html.value = this.value
+        this.html.focus()
+    }
+    getTextAlign() {
+        if (this.textAlign) return this.textAlign
+        const { anchorX } = this
+        if (anchorX === 0) return "left"
+        if (anchorX === 1) return "right"
+        return "center"
+    }
+    onValue(val) {
+        this.value = val
+        this.trigger("input", val)
+    }
+}
 
 // flash
 

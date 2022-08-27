@@ -25,15 +25,17 @@
     <script type="module">
         import { ExampleGame } from './example.js'
         document.body.onload = () => {
-            const can = document.body.querySelector("canvas")
-            const game = new ExampleGame(can, { fitTo:document.body })
+            const game = new ExampleGame(
+                document.body,
+                {
+                    fitTo: document.body,
+                }
+            )
             game.initLoop()
         }
     </script>
 </head>
 
-<body>
-    <canvas></canvas>
-</body>
+<body></body>
 
 </html>

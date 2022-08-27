@@ -65,28 +65,10 @@ class ExampleScene extends Scene {
         super(...args)
         this.viewY = 0
         this.state = "START"
-        this.sprites = []
-        this.backSprites = []
-        this.fixedSprites = []
         this.start()
     }
-    add(cls, kwargs) {
-        const sprite = new cls(this, kwargs)
-        this.sprites.push(sprite)
-        return sprite
-    }
-    addBack(cls, kwargs) {
-        const sprite = new cls(this, kwargs)
-        this.backSprites.push(sprite)
-        return sprite
-    }
-    addFixed(cls, kwargs) {
-        const sprite = new cls(this, kwargs)
-        this.fixedSprites.push(sprite)
-        return sprite
-    }
     initHero(){
-        this.hero = this.add(Hero, {
+        this.hero = this.addSprite(Hero, {
             x: this.width / 2,
             y: HERO_Y,
         })
@@ -96,21 +78,22 @@ class ExampleScene extends Scene {
         if (this.state == "ONGOING") {
             this.viewY -= RUN_SPD * dt
             ExampleScene.updaters.forEach(fn => fn(this))
-            for(let name of ["sprites", "backSprites", "fixedSprites"])
-                this[name].forEach(s => s.update(dt))
-            for(let name of ["sprites", "backSprites"])
-                this[name].forEach(removeIfOut)
-            for(let name of ["sprites", "backSprites", "fixedSprites"])
-                this[name] = this[name].filter(s => !s.removed)
             if (this.time > DURATION + 3) this.finish()
         }
     }
     draw(dt) {
-        const ctx = this.canvas.getContext("2d")
-        this.backSprites.forEach(s => s.drawTo(ctx, dt, 0, this.viewY))
-        this.sprites.sort((a, b) => a.y > b.y)
-        this.sprites.forEach(s => s.drawTo(ctx, dt, 0, this.viewY))
-        this.fixedSprites.forEach(s => s.drawTo(ctx, dt, 0, 0))
+        const viewY = this.viewY, ctx = this.canvas.getContext("2d")
+        this.sprites.sort((a, b) => {
+            const af = a.fixed, bf = b.fixed
+            if(af !== bf) return af === true
+            const dz = (a.z - b.z)
+            if(dz !== 0) return dz > 0
+            return (a.y - b.y) > 0
+        })
+        this.sprites.forEach(sprite => {
+            if(!sprite.removed)
+                sprite.drawTo(ctx, dt, 0, sprite.fixed ? 0 : viewY)
+        })
     }
     start() {
         this.state = "START"
@@ -122,7 +105,7 @@ class ExampleScene extends Scene {
     addIntroSprites() {
         this.introSprites = []
         const addIntro = (cls, kwargs) => {
-            const sprite = this.add(cls, kwargs)
+            const sprite = this.addSprite(cls, kwargs)
             this.introSprites.push(sprite)
         }
         const args = {
@@ -160,23 +143,26 @@ class ExampleScene extends Scene {
         let x = WIDTH / 2
         let font = "30px Arial"
         const anchorX = .5, anchorY = 0
-        this.addFixed(Text, {
+        this.addSprite(Text, {
             x, y: 200,
             font, anchorX, anchorY,
-            value: `SCORE: ${this.score}`
+            value: `SCORE: ${this.score}`,
+            fixed: true
         })
         font = "20px Arial"
         let text = "J'espere que ce jeu vous a plu ;)"
-        this.addFixed(Text, {
+        this.addSprite(Text, {
             x, y: 300,
             font, anchorX, anchorY,
             value: text,
-            lineHeight: 40
+            lineHeight: 40,
+            fixed: true
         })
-        this.addFixed(Text, {
+        this.addSprite(Text, {
             x, y: 550,
             font, anchorX, anchorY,
-            value: `Touchez pour recommencer`
+            value: `Touchez pour recommencer`,
+            fixed: true
         })
         this.on("click", () => {
             this.remove()
@@ -257,6 +243,7 @@ class VolumeBut extends Sprite {
 class Notif extends Text {
     constructor(...args) {
         super(...args)
+        this.fixed = true
     }
     update(dt) {
         super.update(dt)
@@ -271,10 +258,11 @@ Notif.prototype.anchorY = 1
 
 ExampleScene.ongoers.push(scn => {
     scn.time = 0
-    scn.addFixed(Text, {
+    scn.addSprite(Text, {
         x: 10,
         y: 35,
-        value: () => `Time: ${max(0, floor(DURATION - scn.time))}`
+        value: () => `Time: ${max(0, floor(DURATION - scn.time))}`,
+        fixed: true
     })
 })
 
@@ -311,9 +299,10 @@ function createTilesRow(scn, kwargs) {
 }
 
 function createTilesSprite(scn, kwargs) {
-    const sprite = scn.addBack(Sprite, {
+    const sprite = scn.addSprite(Sprite, {
         width: TILES_FRAME_SIZE,
-        height: TILES_FRAME_SIZE
+        height: TILES_FRAME_SIZE,
+        z: -1
     })
     sprite.autoTransformImg = false
     Object.assign(sprite, kwargs)
@@ -359,16 +348,17 @@ class Hero extends Sprite {
     damage(n) {
         const scn = this.scene
         scn.score -= n
-        scn.addFixed(Notif, {
+        scn.addSprite(Notif, {
             x: this.x,
             y: HERO_Y - 50,
             value: "-" + n,
             color: "red"
         })
-        scn.addFixed(MSG.Flash, {
+        scn.addSprite(MSG.Flash, {
             width: WIDTH,
             height: HEIGHT,
-            rgb: "255,0,0"
+            rgb: "255,0,0",
+            fixed: true
         })
         this.damageTime = this.time
         ouchAud.replay()
@@ -407,10 +397,11 @@ ExampleScene.ongoers.push(scn => {
 
 ExampleScene.ongoers.push(scn => {
     scn.score = 10
-    scn.addFixed(Text, {
+    scn.addSprite(Text, {
         x: 10,
         y: 10,
-        value: () => `Score: ${scn.score}`
+        value: () => `Score: ${scn.score}`,
+        fixed: true
     })
 })
 
@@ -431,7 +422,7 @@ ExampleScene.updaters.push(scn => {
 })
 
 function createEnemy(scn) {
-    const sprite = scn.add(Sprite, {
+    const sprite = scn.addSprite(Sprite, {
         x: ENEMY_SIZE / 2 + rand() * (WIDTH - ENEMY_SIZE / 2),
         y: scn.viewY,
         anim: EnemyAnim,
