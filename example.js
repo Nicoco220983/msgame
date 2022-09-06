@@ -88,17 +88,16 @@ class ExampleScene extends Scene {
         }
     }
     draw(dt) {
-        const viewY = this.viewY, ctx = this.canvas.getContext("2d")
+        const viewX = this.viewX, viewY = this.viewY, ctx = this.canvas.getContext("2d")
         this.sprites.sort((a, b) => {
-            const af = a.fixed, bf = b.fixed
-            if(af !== bf) return af === true
             const dz = (a.z - b.z)
             if(dz !== 0) return dz > 0
             return (a.y - b.y) > 0
         })
         this.sprites.forEach(sprite => {
-            if(!sprite.removed)
-                sprite.drawTo(ctx, dt, 0, sprite.fixed ? 0 : viewY)
+            if(sprite.removed) return
+            const viewF = sprite.viewF === undefined ? 1 : sprite.viewF
+            sprite.drawTo(ctx, dt, viewX * viewF, viewY * viewF)
         })
     }
     start() {
@@ -153,7 +152,8 @@ class ExampleScene extends Scene {
             x, y: 200,
             font, anchorX, anchorY,
             value: `SCORE: ${this.score}`,
-            fixed: true
+            z: 10,
+            viewF: 0
         })
         font = "20px Arial"
         let text = "J'espere que ce jeu vous a plu ;)"
@@ -162,13 +162,15 @@ class ExampleScene extends Scene {
             font, anchorX, anchorY,
             value: text,
             lineHeight: 40,
-            fixed: true
+            z: 10,
+            viewF: 0
         })
         this.addSprite(Text, {
             x, y: 550,
             font, anchorX, anchorY,
             value: `Touchez pour recommencer`,
-            fixed: true
+            z: 10,
+            viewF: 0
         })
         this.once("click", () => {
             this.remove()
@@ -261,7 +263,8 @@ class _Sprite extends Sprite {
 
 class Notif extends Text {
 
-    fixed = true
+    z = 10
+    viewF = 0
 
     update(dt) {
         super.update(dt)
@@ -280,7 +283,8 @@ ExampleScene.ongoers.push(scn => {
         x: 10,
         y: 35,
         value: () => `Time: ${max(0, floor(DURATION - scn.time))}`,
-        fixed: true
+        z: 10,
+        viewF: 0
     })
 })
 
@@ -384,7 +388,8 @@ class Hero extends _Sprite {
             width: WIDTH,
             height: HEIGHT,
             rgb: "255,0,0",
-            fixed: true
+            z: 9,
+            viewF: 0
         })
         this.damageTime = this.time
         ouchAud.replay()
@@ -423,7 +428,8 @@ ExampleScene.ongoers.push(scn => {
         x: 10,
         y: 10,
         value: () => `Score: ${scn.score}`,
-        fixed: true
+        z: 10,
+        viewF: 0
     })
 })
 
