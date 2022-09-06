@@ -1,0 +1,30 @@
+#!/usr/bin/env python
+import argparse
+
+from PIL import Image
+
+
+def gif_to_sprite(gif_fpath, sprite_fpath):
+
+    gif_img = Image.open(gif_fpath)
+    assert gif_img.is_animated
+    n_frames = gif_img.n_frames
+    width, height = gif_img.size
+
+    sprite_img = Image.new('RGB', (width * n_frames, height))
+    for i in range(gif_img.n_frames):
+        gif_img.seek(i)
+        sprite_img.paste(gif_img, (width*i, 0))
+    
+    sprite_img.save(sprite_fpath, format="PNG")
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        description='Make a spritesheet from an animated gif.'
+    )
+    parser.add_argument('gif_fpath', type=str)
+    parser.add_argument('sprite_fpath', type=str)
+
+    args = parser.parse_args()
+    gif_to_sprite(args.gif_fpath, args.sprite_fpath)
