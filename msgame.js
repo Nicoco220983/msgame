@@ -67,9 +67,7 @@ export class Pool {
 
 class Elem {
 
-    constructor() {
-        this.time = 0
-    }
+    time = 0
 
     update(dt) {
         this.time += dt
@@ -139,9 +137,8 @@ class Elem {
 
 export class Game extends Elem {
 
-    constructor(parentEl, kwargs) {
+    constructor(parentEl) {
         super()
-        this.set(kwargs)
         this.initCanvas(parentEl)
         this.initPointer()
         // focus
@@ -149,8 +146,8 @@ export class Game extends Elem {
         document.addEventListener("blur", () => this.trigger("blur"))
     }
 
-    set(kwargs) {
-        assign(this, kwargs)
+    set(state) {
+        assign(this, state)
     }
 
     // canvas
@@ -267,20 +264,27 @@ assign(Game.prototype, {
 // Scene
 
 export class Scene extends Elem {
-    constructor(game, kwargs) {
+
+    x = 0
+    y = 0
+
+    constructor(game) {
         super()
         this.game = game
         this.width = game.width
         this.height = game.height
-        this.set(kwargs)
-        this.canvas = _createCan(this.width, this.height)
-        this.initCanvas()
         this.sprites = []
     }
-    set(kwargs) {
-        if(!kwargs) return
-        if(kwargs.removed) this.remove()
-        assign(this, kwargs)
+    set(state) {
+        if(state.removed) this.remove()
+        assign(this, state)
+    }
+    get canvas(){
+        if(!this._canvas) {
+            this._canvas = _createCan(this.width, this.height)
+            this.initCanvas()
+        }
+        return this._canvas
     }
     initCanvas(){
         const color = this.color || "white"
@@ -301,8 +305,9 @@ export class Scene extends Elem {
         const ctx = this.canvas.getContext("2d")
         this.sprites.forEach(s => s.drawTo(ctx, dt, 0, 0))
     }
-    addSprite(cls, kwargs){
-        const res = new cls(this, kwargs)
+    addSprite(cls, state){
+        const res = new cls(this)
+        if(state) res.set(state)
         this.sprites.push(res)
         return res
     }
@@ -311,10 +316,6 @@ export class Scene extends Elem {
         this.sprites.forEach(s => s.remove())
     }
 }
-assign(Scene.prototype, {
-    x: 0,
-    y: 0,
-})
 
 // Sprite
 
@@ -342,16 +343,28 @@ export function fillImg(img) {
 }
 
 export class Sprite extends Elem {
-    constructor(scn, kwargs) {
+
+    x = 0
+    y = 0
+    z = 0
+    width = 50
+    height = 50
+    angle = 0
+    anchorX = 0
+    anchorY = 0
+    anim = "black"
+    animTime = 0
+    getImgScaleArgs = strechImg
+
+    constructor(scn) {
         super()
         this.scene = scn
         this.game = scn.game
-        this.set(kwargs)
     }
 
-    set(kwargs) {
-        if(kwargs.removed) this.remove()
-        assign(this, kwargs)
+    set(state) {
+        if(state.removed) this.remove()
+        assign(this, state)
     }
 
     getBoundaries() {
@@ -405,20 +418,6 @@ export class Sprite extends Elem {
         })
     }
 }
-
-assign(Sprite.prototype, {
-    x: 0,
-    y: 0,
-    z: 0,
-    width: 50,
-    height: 50,
-    angle: 0,
-    anchorX: 0,
-    anchorY: 0,
-    anim: "black",
-    animTime: 0,
-    getImgScaleArgs: strechImg
-})
 
 // Loads
 
@@ -475,9 +474,11 @@ export class SpriteSheet {
 // Anim
 
 export class Anim {
+
+    fps = 1
+
     constructor(imgs, kwargs) {
         this.imgs = _asArr(imgs).map(img => (typeof img === "string") ? new Img(img) : img)
-        this.fps = 1
         assign(this, kwargs)
     }
     getImg(time) {
@@ -528,10 +529,12 @@ export const Audios = []
 export let VolumeLevel = 1
 
 export class Aud extends Audio {
+
+    baseVolume = 1
+
     constructor(src, kwargs) {
         super()
         this.src = src
-        this.baseVolume = 1
         assign(this, kwargs)
         this.syncVolume()
         this.setLoop(this.loop)
@@ -797,6 +800,9 @@ export class InputSprite extends HtmlSprite {
 // flash
 
 export class Flash extends Sprite {
+
+    ttl = .15
+
     update(dt) {
         super.update(dt)
         if (this.time > this.ttl) this.remove()
@@ -818,5 +824,3 @@ export class Flash extends Sprite {
         ctx.setTransform(1, 0, 0, 1, 0, 0)
     }
 }
-
-Flash.prototype.ttl = .15

@@ -16,9 +16,11 @@ const DURATION = 15
 const VOLUME_LEVEL = 0.3
 
 export class ExampleGame extends Game {
+
+    paused = false
+
     constructor(...args) {
         super(...args)
-        this.paused = false
         document.addEventListener("focus", () => this.pause(false))
         document.addEventListener("blur", () => this.pause(true))
         this.addPointerDownListener(pos => {
@@ -46,8 +48,9 @@ export class ExampleGame extends Game {
         if(this.volumeBut) this.volumeBut.drawTo(ctx, dt, 0, 0)
     }
     addVolumeBut() {
-        if(!this.volumeBut)
-            this.volumeBut = new VolumeBut(this, { x: this.width - 50, y: 50 })
+        if(this.volumeBut) return
+        this.volumeBut = new VolumeBut(this)
+        this.volumeBut.set({ x: this.width - 50, y: 50 })
     }
     pause(val) {
         if (val === this.paused) return
@@ -61,10 +64,13 @@ ExampleGame.prototype.height = HEIGHT
 // scene
 
 class ExampleScene extends Scene {
+
+    viewX = 0
+    viewY = 0
+    step = "START"
+
     constructor(...args) {
         super(...args)
-        this.viewY = 0
-        this.state = "START"
         this.start()
     }
     initHero(){
@@ -75,7 +81,7 @@ class ExampleScene extends Scene {
     }
     update(dt) {
         super.update(dt)
-        if (this.state == "ONGOING") {
+        if (this.step == "ONGOING") {
             this.viewY -= RUN_SPD * dt
             ExampleScene.updaters.forEach(fn => fn(this))
             if (this.time > DURATION + 3) this.finish()
@@ -96,7 +102,7 @@ class ExampleScene extends Scene {
         })
     }
     start() {
-        this.state = "START"
+        this.step = "START"
         this.addIntroSprites()
         this.on("click", () => this.ongoing())
         this.initHero()
@@ -130,15 +136,15 @@ class ExampleScene extends Scene {
         })
     }
     ongoing() {
-        if (this.state != "START") return
-        this.state = "ONGOING"
+        if (this.step != "START") return
+        this.step = "ONGOING"
         ExampleScene.ongoers.forEach(fn => fn(this))
         const aud = new Aud(absPath('assets/music.mp3'))
         MSG.waitLoads(aud).then(() => aud.replay({ baseVolume: .2, loop: true }))
-        this.on("remove", () => aud.pause())
+        this.once("remove", () => aud.pause())
     }
     finish() {
-        this.state = "END"
+        this.step = "END"
         this.hero.anim = HeroAnims.happy
         let x = WIDTH / 2
         let font = "30px Arial"
@@ -164,7 +170,7 @@ class ExampleScene extends Scene {
             value: `Touchez pour recommencer`,
             fixed: true
         })
-        this.on("click", () => {
+        this.once("click", () => {
             this.remove()
             this.game.start()
         })
@@ -220,12 +226,14 @@ const volumeSS = new SpriteSheet(absPath('assets/volume.png'), {
 const VolumeAnims = [0, 1].map(i => new Anim(volumeSS.getFrame(i)))
 
 class VolumeBut extends Sprite {
+
+    width = 50
+    height = 50
+    anchorX = .5
+    anchorY = .5
+
     constructor(...args) {
         super(...args)
-        this.width = 50
-        this.height = 50
-        this.anchorX = .5
-        this.anchorY = .5
         this.syncAnim()
         this.on("click", () => {
             volumeMuted = !volumeMuted
@@ -240,11 +248,21 @@ class VolumeBut extends Sprite {
 
 // common
 
-class Notif extends Text {
-    constructor(...args) {
-        super(...args)
-        this.fixed = true
+class _Sprite extends Sprite {
+    update(dt) {
+        super.update(dt)
+        // remove if out
+        const scn = this.scene
+        if((this.y - this.height) > ( scn.viewY + scn.height)) {
+            this.remove()
+        }
     }
+}
+
+class Notif extends Text {
+
+    fixed = true
+
     update(dt) {
         super.update(dt)
         this.y -= 20 * dt
@@ -268,46 +286,50 @@ ExampleScene.ongoers.push(scn => {
 
 // background
 
-const TILES_FRAME_SIZE = 50
+const TILE_SIZE = 50
 
 const TilesAnim = new Anim(absPath('assets/tiles.png'))
 
-let LastTilesSprite
-
 ExampleScene.starters.push(scn => {
-    const nbTilesY = HEIGHT / TILES_FRAME_SIZE
-    for (let j = nbTilesY; j >= 0; --j) {
-        createTilesRow(scn, {
-            y: j * TILES_FRAME_SIZE
-        })
-    }
+    createNewTiles(scn)
 })
 
 ExampleScene.updaters.push(scn => {
-    if (LastTilesSprite.y > -TILES_FRAME_SIZE+scn.viewY)
-        createTilesRow(scn, {
-            y: LastTilesSprite.y - TILES_FRAME_SIZE
-        })
+    createNewTiles(scn)
 })
 
-function createTilesRow(scn, kwargs) {
-    const nbTiles = WIDTH / TILES_FRAME_SIZE
-    for (let i = 0; i < nbTiles; ++i) {
-        kwargs.x = i * TILES_FRAME_SIZE
-        LastTilesSprite = createTilesSprite(scn, kwargs)
+let TilesMinNx = 1, TilesMaxNx = 0, TilesMinNy = 1, TilesMaxNy = 0
+
+function createNewTiles(scn) {
+    let _tilesMinNx = TilesMinNx, _tilesMaxNx = TilesMaxNx, _tilesMinNy = TilesMinNy, _tilesMaxNy = TilesMaxNy
+    for(let nx = floor(scn.viewX/TILE_SIZE); nx < (scn.viewX + WIDTH)/TILE_SIZE; ++nx) {
+        for(let ny = floor(scn.viewY/TILE_SIZE); ny < (scn.viewY + HEIGHT)/TILE_SIZE; ++ny) {
+            if(nx >= TilesMinNx && nx <= TilesMaxNx && ny >= TilesMinNy && ny <= TilesMaxNy) continue
+            scn.addSprite(Tile, {
+                x: nx * TILE_SIZE,
+                y: ny * TILE_SIZE,
+            })
+            _tilesMinNx = min(_tilesMinNx, nx)
+            _tilesMaxNx = max(_tilesMaxNx, nx)
+            _tilesMinNy = min(_tilesMinNy, ny)
+            _tilesMaxNy = max(_tilesMaxNy, ny)
+        }
     }
+    TilesMinNx = _tilesMinNx
+    TilesMaxNx = _tilesMaxNx
+    TilesMinNy = _tilesMinNy
+    TilesMaxNy = _tilesMaxNy
 }
 
-function createTilesSprite(scn, kwargs) {
-    const sprite = scn.addSprite(Sprite, {
-        width: TILES_FRAME_SIZE,
-        height: TILES_FRAME_SIZE,
-        z: -1
-    })
-    sprite.autoTransformImg = false
-    Object.assign(sprite, kwargs)
-    sprite.anim = TilesAnim
-    return sprite
+class Tile extends _Sprite {
+    constructor(...args){
+        super(...args)
+        this.width = TILE_SIZE
+        this.height = TILE_SIZE
+        this.z = -1
+        this.autoTransformImg = false
+        this.anim = TilesAnim
+    }
 }
 
 // hero
@@ -329,21 +351,25 @@ const HeroAnims = {
 
 const ouchAud = new Aud(absPath('assets/ouch.mp3'), { baseVolume: .2 })
 
-class Hero extends Sprite {
-    constructor(...args) {
-        super(...args)
-        this.y = HERO_Y
-        this.anim = HeroAnims.ready
-        this.width = HERO_SIZE
-        this.height = HERO_SIZE
-        this.anchorX = ANCHOR_X
-        this.anchorY = ANCHOR_Y
-        this.dx = 0
-        this.damageTime = null
-        this.autoTransformImg = false
-        this.on("update", function() {
-            this.y = HERO_Y + this.scene.viewY
-        })
+class Hero extends _Sprite {
+
+    y = HERO_Y
+    anim = HeroAnims.ready
+    width = HERO_SIZE
+    height = HERO_SIZE
+    anchorX = ANCHOR_X
+    anchorY = ANCHOR_Y
+    dx = 0
+    damageTime = null
+    autoTransformImg = false
+
+    update(dt){
+        super.update(dt)
+        this.y = HERO_Y + this.scene.viewY
+        if(this.scene.step == "ONGOING") {
+            this.updAnim(dt)
+            this.applyPlayerControls(dt)
+        }
     }
     damage(n) {
         const scn = this.scene
@@ -386,10 +412,6 @@ class Hero extends Sprite {
 ExampleScene.ongoers.push(scn => {
     const game = scn.game, hero = scn.hero
     hero.anim = HeroAnims.run
-    hero.on("update", function (dt) {
-        this.updAnim(dt)
-        this.applyPlayerControls(dt)
-    })
 })
 
 
@@ -412,37 +434,38 @@ const ENEMY_SIZE = 40
 
 const EnemyAnim = new Anim(absPath('assets/enemy.png'))
 
-ExampleScene.updaters.push(scn => {
-    if (scn.time > DURATION) return
-    const nextTime = scn.enemyNextTime || 0
-    if (scn.time > nextTime) {
-        createEnemy(scn)
-        scn.enemyNextTime = scn.time + randge(.3, .7)
-    }
-})
+class Enemy extends _Sprite {
 
-function createEnemy(scn) {
-    const sprite = scn.addSprite(Sprite, {
-        x: ENEMY_SIZE / 2 + rand() * (WIDTH - ENEMY_SIZE / 2),
-        y: scn.viewY,
-        anim: EnemyAnim,
-        width: ENEMY_SIZE,
-        height: ENEMY_SIZE,
-        anchorX: ANCHOR_X,
-        anchorY: ANCHOR_Y,
-        score: 1
-    })
-    sprite.autoTransformImg = false
-    sprite.on("update", function () {
-        if (MSG.collide(this, scn.hero))
-            this.onCollide(scn.hero)
-    })
-    sprite.onCollide = function (hero) {
+    x = ENEMY_SIZE / 2 + rand() * (WIDTH - ENEMY_SIZE / 2)
+    y = this.scene.viewY
+    anim = EnemyAnim
+    width = ENEMY_SIZE
+    height = ENEMY_SIZE
+    anchorX = ANCHOR_X
+    anchorY = ANCHOR_Y
+    score = 1
+    autoTransformImg = false
+
+    update(dt){
+        super.update(dt)
+        if (MSG.collide(this, this.scene.hero))
+            this.onCollide(this.scene.hero)
+    }
+    onCollide(hero) {
         if(!this.collided)
             hero.damage(this.score)
         this.collided = true
     }
 }
+
+ExampleScene.updaters.push(scn => {
+    if (scn.time > DURATION) return
+    const nextTime = scn.enemyNextTime || 0
+    if (scn.time > nextTime) {
+        scn.addSprite(Enemy)
+        scn.enemyNextTime = scn.time + randge(.3, .7)
+    }
+})
 
 // utils
 
