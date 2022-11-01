@@ -1,6 +1,6 @@
 const { assign } = Object
-const { abs, floor, ceil, min, max, sqrt, random: rand, cos, sin, atan2 } = Math
-const { log } = console
+const { abs, floor, ceil, min, max, sqrt, random: rand, cos, sin, atan2, PI } = Math
+const { log, assert } = console
 
 // utils
 
@@ -69,7 +69,10 @@ class Elem {
 
     time = 0
 
+    start() {}
+
     update(dt) {
+        if(this.time === 0) this.start()
         this.time += dt
         this.trigger("update", dt)
     }
@@ -137,13 +140,15 @@ class Elem {
 
 export class Game extends Elem {
 
-    constructor(parentEl) {
+    width = 600
+    height = 400
+    fps = 60
+    dblClickDurarion = .3
+
+    constructor(parentEl, kwargs) {
         super()
-        this.initCanvas(parentEl)
-        this.initPointer()
-        // focus
-        document.addEventListener("focus", () => this.trigger("focus"))
-        document.addEventListener("blur", () => this.trigger("blur"))
+        this.parentEl = parentEl
+        if(kwargs) this.set(kwargs)
     }
 
     set(state) {
@@ -152,20 +157,26 @@ export class Game extends Elem {
 
     // canvas
 
-    initCanvas(parentEl) {
-        const wrapEl = this.wrapEl = document.createElement("div")
-        assign(wrapEl.style, { position: "relative" })
-        const can = this.canvas = document.createElement("canvas")
-        assign(can, { width: this.width, height: this.height })
-        this.fitCanvasTo(this.fitTo || parentEl)
-        wrapEl.appendChild(can)
-        parentEl.appendChild(wrapEl)
+    get canvas() {
+        if(!this._canvas) {
+            const wrapEl = this.wrapEl = document.createElement("div")
+            assign(wrapEl.style, { position: "relative" })
+            const can = this._canvas = document.createElement("canvas")
+            assign(can, { width: this.width, height: this.height })
+            if(this.autoFit !== false) {
+                this.fitCanvas()
+                window.addEventListener('resize', () => this.fitCanvas())
+            }
+            wrapEl.appendChild(can)
+            this.parentEl.appendChild(wrapEl)
+        }
+        return this._canvas
     }
 
-    fitCanvasTo(el) {
+    fitCanvas() {
         const WoH = this.width / this.height
-        const elW = el.offsetWidth || el.innerWidth
-        const elH = el.offsetHeight || el.innerHeight
+        const elW = this.parentEl.offsetWidth || this.parentEl.innerWidth
+        const elH = this.parentEl.offsetHeight || this.parentEl.innerHeight
         const elWoH = elW / elH
         this.canvas.style.width = floor((WoH > elWoH) ? elW : (elH * WoH)) + "px"
         this.canvas.style.height = floor((WoH > elWoH) ? (elW / WoH) : elH) + "px"
@@ -175,7 +186,6 @@ export class Game extends Elem {
 
     async initLoop() {
         await waitLoads()
-        this.start()
         const timeFrame = 1 / this.fps
         let dt = timeFrame
         while (true) {
@@ -189,7 +199,11 @@ export class Game extends Elem {
         }
     }
 
-    start() {}
+    start() {
+        this.initPointer()
+        document.addEventListener("focus", () => this.trigger("focus"))
+        document.addEventListener("blur", () => this.trigger("blur"))
+    }
 
     draw(dt) {}
 
@@ -256,10 +270,6 @@ export class Game extends Elem {
         }
     }
 }
-assign(Game.prototype, {
-    fps: 60,
-    dblClickDurarion: .3
-})
 
 // Scene
 
@@ -267,13 +277,16 @@ export class Scene extends Elem {
 
     x = 0
     y = 0
+    viewX = 0
+    viewY = 0
 
-    constructor(game) {
+    constructor(game, kwargs) {
         super()
         this.game = game
         this.width = game.width
         this.height = game.height
         this.sprites = []
+        if(kwargs) this.set(kwargs)
     }
     set(state) {
         if(state.removed) this.remove()
@@ -302,8 +315,8 @@ export class Scene extends Elem {
         gameCtx.drawImage(this.canvas, ~~(this.x - viewX), ~~(this.y - viewY))
     }
     draw(dt) {
-        const ctx = this.canvas.getContext("2d")
-        this.sprites.forEach(s => s.drawTo(ctx, dt, 0, 0))
+        const viewX = this.viewX, viewY = this.viewY, ctx = this.canvas.getContext("2d")
+        this.sprites.forEach(s => s.drawTo(ctx, dt, viewX, viewY))
     }
     addSprite(cls, state){
         const res = new cls(this)
@@ -356,10 +369,11 @@ export class Sprite extends Elem {
     animTime = 0
     getImgScaleArgs = strechImg
 
-    constructor(scn) {
+    constructor(scn, kwargs) {
         super()
         this.scene = scn
         this.game = scn.game
+        if(kwargs) this.set(kwargs)
     }
 
     set(state) {
@@ -409,11 +423,18 @@ export class Sprite extends Elem {
 
     getDefaultAnim() {
         const color = this.anim
-        return _getCached(this.__proto__, `dImg:${color}`, () => {
+        const shape = this.animShape || "box"
+        return _getCached(this.__proto__, `dImg:${shape}:${color}`, () => {
             const size = 10
             const can = _createCan(size, size), ctx = _ctx(can)
             ctx.fillStyle = color
-            ctx.fillRect(0, 0, size, size)
+            if(shape === "box") {
+                ctx.fillRect(0, 0, size, size)
+            } else if(shape === "circle") {
+                ctx.beginPath()
+                ctx.arc(size/2, size/2, size/2, 0, 2*PI, false)
+                ctx.fill()
+            }
             return new Anim(can)
         })
     }
@@ -476,6 +497,7 @@ export class SpriteSheet {
 export class Anim {
 
     fps = 1
+    loop = true
 
     constructor(imgs, kwargs) {
         this.imgs = _asArr(imgs).map(img => (typeof img === "string") ? new Img(img) : img)
@@ -483,7 +505,9 @@ export class Anim {
     }
     getImg(time) {
         const imgs = this.imgs
-        const numImg = floor(time * this.fps) % imgs.length
+        let numImg = floor(time * this.fps)
+        if(this.loop) numImg = numImg % imgs.length
+        else if(numImg >= imgs.length) return null
         return imgs[numImg]
     }
     transformImg(img, kwargs) {
@@ -724,13 +748,21 @@ export class Text extends Sprite {
 // html
 
 export class HtmlSprite extends Sprite {
+
+    anim = null
+
     constructor(scn, kwargs) {
-        super(scn, kwargs)
+        super(scn)
+        if(kwargs) this.set(kwargs)
+    }
+
+    start(){
+        super.start()
+        this.initHtml()
+    }
+
+    initHtml() {
         this.html = toHtml(this.html)
-        assign(this.html.style, {
-            display: "block",
-            position: "absolute",
-        })
         this.syncHtmlPos()
         this.game.wrapEl.appendChild(this.html)
     }
@@ -741,18 +773,20 @@ export class HtmlSprite extends Sprite {
         const scn = this.scene
         const { x, y, width, height } = this.getBoundaries()
         assign(this.html.style, {
+            display: "block",
+            position: "absolute",
             left: this.toHtmlPos(x, scn.width),
             top: this.toHtmlPos(y, scn.height),
             width: this.toHtmlPos(width, scn.width),
             height: this.toHtmlPos(height, scn.height),
         })
     }
+
     remove(){
         super.remove()
         this.html.remove()
     }
 }
-HtmlSprite.prototype.anim = null
 
 function toHtml(html) {
     if(html instanceof HTMLElement) {
@@ -767,11 +801,17 @@ function toHtml(html) {
 // input
 
 export class InputSprite extends HtmlSprite {
+
     constructor(scn, kwargs) {
-        super(scn, {
+        super(scn)
+        this.set({
             html: "<input type='text' />",
             ...kwargs
         })
+    }
+
+    start() {
+        super.start()
         if(this.font) this.html.style.font = this.font
         if(this.color) this.html.style.color = this.color
         if(this.placeholder) this.html.setAttribute("placeholder", this.placeholder)
@@ -803,6 +843,11 @@ export class Flash extends Sprite {
 
     ttl = .15
 
+    constructor(scn, kwargs) {
+        super(scn)
+        if(kwargs) this.set(kwargs)
+    }
+
     update(dt) {
         super.update(dt)
         if (this.time > this.ttl) this.remove()
@@ -822,5 +867,59 @@ export class Flash extends Sprite {
         ctx.fillStyle = grd
         ctx.fillRect(~~viewX, ~~viewY, size, size)
         ctx.setTransform(1, 0, 0, 1, 0, 0)
+    }
+}
+
+// tiler
+
+export class Tiler {
+
+    addedMinNx = 1
+    addedMinNy = 1
+    addedMaxNx = 0
+    addedMaxNy = 0
+
+    constructor(scn, tileWidth, tileHeight) {
+        this.scene = scn
+        this.tileWidth = tileWidth
+        this.tileHeight = tileHeight
+    }
+
+    getNxRange() {
+        return [
+            floor(this.scene.viewX/this.tileWidth),
+            floor((this.scene.viewX + this.scene.width)/this.tileWidth)
+        ]
+    }
+
+    getNyRange() {
+        return [
+            floor(this.scene.viewY/this.tileHeight),
+            floor((this.scene.viewY + this.scene.height)/this.tileHeight)
+        ]
+    }
+
+    addNewTiles() {
+        const { addedMinNx, addedMinNy, addedMaxNx, addedMaxNy } = this
+        let _addedMinNx = addedMinNx
+        let _addedMinNy = addedMinNy
+        let _addedMaxNx = addedMaxNx
+        let _addedMaxNy = addedMaxNy
+        const [minNx, maxNx] = this.getNxRange()
+        const [minNy, maxNy] = this.getNyRange()
+        for(let nx = minNx; nx <= maxNx; ++nx) {
+            for(let ny = minNy; ny <= maxNy; ++ny) {
+                if(nx >= addedMinNx && nx <= addedMaxNx && ny >= addedMinNy && ny <= addedMaxNy) continue
+                this.addTile(nx, ny)
+                _addedMinNx = min(_addedMinNx, nx)
+                _addedMinNy = min(_addedMinNy, ny)
+                _addedMaxNx = max(_addedMaxNx, nx)
+                _addedMaxNy = max(_addedMaxNy, ny)
+            }
+        }
+        this.addedMinNx = _addedMinNx
+        this.addedMinNy = _addedMinNy
+        this.addedMaxNx = _addedMaxNx
+        this.addedMaxNy = _addedMaxNy
     }
 }

@@ -19,18 +19,13 @@
         }
 
         canvas {
-            background: white;
+            background: black;
         }
     </style>
     <script type="module">
         import { ExampleGame } from './example.js'
         document.body.onload = () => {
-            const game = new ExampleGame(
-                document.body,
-                {
-                    fitTo: document.body,
-                }
-            )
+            const game = new ExampleGame(document.body)
             game.initLoop()
         }
     </script>
