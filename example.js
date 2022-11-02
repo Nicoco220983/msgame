@@ -58,10 +58,15 @@ export class ExampleGame extends Game {
     }
     addGameButtons() {
         this.gameButs = []
+        const size = 40, padding = 10
         for(let cls of [VolumeBut, FulscreenBut]) {
             this.gameButs.push(new cls(this, {
-                x: this.width - 60 * (this.gameButs.length + 1) + 25,
-                y: 35
+                anchorX: 1,
+                anchorY: 0,
+                width: size,
+                height: size,
+                x: this.width - padding - (size + padding) * this.gameButs.length,
+                y: padding,
             }))
         }
     }
@@ -226,11 +231,6 @@ const VolumeAnims = [0, 1].map(i => new Anim(volumeSS.getFrame(i)))
 
 class VolumeBut extends Sprite {
 
-    width = 50
-    height = 50
-    anchorX = .5
-    anchorY = .5
-
     constructor(...args) {
         super(...args)
         this.syncAnim()
@@ -256,28 +256,22 @@ const FullscreenAnims = [0, 1].map(i => new Anim(fullscreenSS.getFrame(i)))
 
 class FulscreenBut extends Sprite {
 
-    width = 50
-    height = 50
-    anchorX = .5
-    anchorY = .5
-
     constructor(...args) {
         super(...args)
-        this.isFullscreen = false
         this.syncAnim()
+        const fsEl = this.game.parentEl
         this.on("click", async () => {
-            if(this.isFullscreen) {
+            if(document.fullscreenElement) {
                 document.exitFullscreen()
             } else {
-                await this.game.parentEl.requestFullscreen()
+                await fsEl.requestFullscreen()
             }
-            this.isFullscreen = !this.isFullscreen
-            this.syncAnim()
         })
+        fsEl.addEventListener("fullscreenchange", () => this.syncAnim())
     }
 
     syncAnim() {
-        this.anim = FullscreenAnims[this.isFullscreen ? 0 : 1]
+        this.anim = FullscreenAnims[document.fullscreenElement ? 0 : 1]
     }
 }
 
