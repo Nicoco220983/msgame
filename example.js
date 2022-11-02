@@ -52,8 +52,7 @@ export class ExampleGame extends Game {
         const ctx = this.canvas.getContext("2d")
         this.scene.drawTo(ctx, this.paused ? 0 : dt)
         if(this.paused) this.pauseScene.drawTo(ctx, dt)
-        for(let but of this.gameButs)
-            but.drawTo(ctx, dt, 0, 0)
+        this.gameButs.forEach(b => b.drawTo(ctx, dt, 0, 0))
     }
     addGameButtons() {
         this.gameButs = []
