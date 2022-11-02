@@ -59,7 +59,7 @@ export class ExampleGame extends Game {
     addGameButtons() {
         this.gameButs = []
         const size = 40, padding = 10
-        for(let cls of [VolumeBut, FulscreenBut]) {
+        for(let cls of [VolumeBut, FullscreenBut, PauseBut]) {
             this.gameButs.push(new cls(this, {
                 anchorX: 1,
                 anchorY: 0,
@@ -74,6 +74,7 @@ export class ExampleGame extends Game {
         if (val === this.paused) return
         this.paused = val
         MSG.pauseAudios(val)
+        this.trigger("pause", val)
     }
 }
 
@@ -131,12 +132,12 @@ class ExampleScene extends Scene {
             anchorY: 0
         }
         addIntro(Text, {
-            ...args, y: 60,
+            ...args, y: 100,
             value: "MsGame",
             font: "60px Arial",
         })
         addIntro(Text, {
-            ...args, y: 130,
+            ...args, y: 170,
             value: "What a light game engine !",
             lineHeight: 30
         })
@@ -201,7 +202,7 @@ class PauseScene extends Scene {
     initCanvas() {
         // background
         const ctx = this.canvas.getContext("2d")
-        ctx.fillStyle = "rgb(0,0,0,0.5)"
+        ctx.fillStyle = "rgb(0,0,0,0.2)"
         ctx.fillRect(0, 0, this.width, this.height)
         // text
         const text = new Text(this, {
@@ -254,7 +255,7 @@ const fullscreenSS = new SpriteSheet(absPath('assets/fullscreen.png'), {
 
 const FullscreenAnims = [0, 1].map(i => new Anim(fullscreenSS.getFrame(i)))
 
-class FulscreenBut extends Sprite {
+class FullscreenBut extends Sprite {
 
     constructor(...args) {
         super(...args)
@@ -272,6 +273,31 @@ class FulscreenBut extends Sprite {
 
     syncAnim() {
         this.anim = FullscreenAnims[document.fullscreenElement ? 0 : 1]
+    }
+}
+
+// pause
+
+const playPauseSS = new SpriteSheet(absPath('assets/play_pause.png'), {
+    frameWidth: 50,
+    frameHeight: 50
+})
+
+const PlayPauseAnims = [0, 1].map(i => new Anim(playPauseSS.getFrame(i)))
+
+class PauseBut extends Sprite {
+
+    constructor(...args) {
+        super(...args)
+        this.syncAnim()
+        this.on("click", () => {
+            this.game.pause(!this.game.paused)
+        })
+        this.game.on("pause", () => this.syncAnim())
+    }
+
+    syncAnim() {
+        this.anim = PlayPauseAnims[this.game.paused ? 0 : 1]
     }
 }
 
