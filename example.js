@@ -25,11 +25,15 @@ export class ExampleGame extends Game {
         super.start()
         document.addEventListener("focus", () => this.pause(false))
         document.addEventListener("blur", () => this.pause(true))
+        this.addGameButtons()
         this.addPointerDownListener(pos => {
-            this.addVolumeBut()
+            for(let but of this.gameButs) {
+                if (MSG.collide(but, pos)) {
+                    but.trigger("click")
+                    return
+                }
+            }
             this.scene.trigger("click", pos)
-            if (MSG.collide(this.volumeBut, pos))
-                this.volumeBut.trigger("click")
         })
         this.restart()
     }
@@ -49,14 +53,17 @@ export class ExampleGame extends Game {
         const ctx = this.canvas.getContext("2d")
         this.scene.drawTo(ctx, this.paused ? 0 : dt)
         if(this.paused) this.pauseScene.drawTo(ctx, dt)
-        if(this.volumeBut) this.volumeBut.drawTo(ctx, dt, 0, 0)
+        for(let but of this.gameButs)
+            but.drawTo(ctx, dt, 0, 0)
     }
-    addVolumeBut() {
-        if(this.volumeBut) return
-        this.volumeBut = new VolumeBut(this, {
-            x: this.width - 50,
-            y: 50
-        })
+    addGameButtons() {
+        this.gameButs = []
+        for(let cls of [VolumeBut, FulscreenBut]) {
+            this.gameButs.push(new cls(this, {
+                x: this.width - 60 * (this.gameButs.length + 1) + 25,
+                y: 35
+            }))
+        }
     }
     pause(val) {
         if (val === this.paused) return
@@ -235,6 +242,42 @@ class VolumeBut extends Sprite {
     }
     syncAnim() {
         this.anim = VolumeAnims[volumeMuted ? 1 : 0]
+    }
+}
+
+// fullscreen
+
+const fullscreenSS = new SpriteSheet(absPath('assets/fullscreen.png'), {
+    frameWidth: 50,
+    frameHeight: 50
+})
+
+const FullscreenAnims = [0, 1].map(i => new Anim(fullscreenSS.getFrame(i)))
+
+class FulscreenBut extends Sprite {
+
+    width = 50
+    height = 50
+    anchorX = .5
+    anchorY = .5
+
+    constructor(...args) {
+        super(...args)
+        this.isFullscreen = false
+        this.syncAnim()
+        this.on("click", async () => {
+            if(this.isFullscreen) {
+                document.exitFullscreen()
+            } else {
+                await this.game.parentEl.requestFullscreen()
+            }
+            this.isFullscreen = !this.isFullscreen
+            this.syncAnim()
+        })
+    }
+
+    syncAnim() {
+        this.anim = FullscreenAnims[this.isFullscreen ? 0 : 1]
     }
 }
 
