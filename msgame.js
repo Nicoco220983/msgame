@@ -369,10 +369,14 @@ export class Sprite extends Elem {
     animTime = 0
     getImgScaleArgs = strechImg
 
-    constructor(scn, kwargs) {
+    constructor(parent, kwargs) {
         super()
-        this.scene = scn
-        this.game = scn.game
+        if(parent instanceof Game) {
+            this.game = parent
+        } else if(parent instanceof Scene) {
+            this.scene = parent
+            this.game = parent.game
+        }
         if(kwargs) this.set(kwargs)
     }
 
