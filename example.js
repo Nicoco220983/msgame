@@ -2,7 +2,7 @@ const { abs, floor, min, max, pow, random: rand, cos } = Math
 const { log } = console
 
 import * as MSG from './msgame.js'
-const { Game, Scene, Sprite, SpriteSheet, Anim, Text, Aud } = MSG
+const { Game, Scene, Sprite, SpriteSheet, Anim, Text, Aud, absPath } = MSG
 const { randge, range, bound } = MSG
 
 // game
@@ -13,11 +13,10 @@ const ANCHOR_X = .5
 const ANCHOR_Y = 1
 const DURATION = 15
 
-const VOLUME_LEVEL = 0.3
+Aud.MaxVolumeLevel = 0.3
 
 export class ExampleGame extends Game {
 
-    paused = false
     width = WIDTH
     height = HEIGHT
 
@@ -59,7 +58,7 @@ export class ExampleGame extends Game {
     addGameButtons() {
         this.gameButs = []
         const size = 40, padding = 10
-        for(let cls of [VolumeBut, FullscreenBut, PauseBut]) {
+        for(let cls of [MSG.VolumeBut, MSG.FullscreenBut, MSG.PauseBut]) {
             this.gameButs.push(new cls(this, {
                 anchorX: 1,
                 anchorY: 0,
@@ -69,12 +68,6 @@ export class ExampleGame extends Game {
                 y: padding,
             }))
         }
-    }
-    pause(val) {
-        if (val === this.paused) return
-        this.paused = val
-        MSG.pauseAudios(val)
-        this.trigger("pause", val)
     }
 }
 
@@ -214,90 +207,6 @@ class PauseScene extends Scene {
             value: "Pause"
         })
         text.drawTo(ctx, 0, 0, 0)
-    }
-}
-
-// volume
-
-let volumeMuted = false
-
-MSG.setVolumeLevel(VOLUME_LEVEL)
-
-const volumeSS = new SpriteSheet(absPath('assets/volume.png'), {
-    frameWidth: 50,
-    frameHeight: 50
-})
-
-const VolumeAnims = [0, 1].map(i => new Anim(volumeSS.getFrame(i)))
-
-class VolumeBut extends Sprite {
-
-    constructor(...args) {
-        super(...args)
-        this.syncAnim()
-        this.on("click", () => {
-            volumeMuted = !volumeMuted
-            MSG.setVolumeLevel(volumeMuted ? 0 : VOLUME_LEVEL)
-            this.syncAnim()
-        })
-    }
-    syncAnim() {
-        this.anim = VolumeAnims[volumeMuted ? 1 : 0]
-    }
-}
-
-// fullscreen
-
-const fullscreenSS = new SpriteSheet(absPath('assets/fullscreen.png'), {
-    frameWidth: 50,
-    frameHeight: 50
-})
-
-const FullscreenAnims = [0, 1].map(i => new Anim(fullscreenSS.getFrame(i)))
-
-class FullscreenBut extends Sprite {
-
-    constructor(...args) {
-        super(...args)
-        this.syncAnim()
-        const fsEl = this.game.parentEl
-        this.on("click", async () => {
-            if(document.fullscreenElement) {
-                document.exitFullscreen()
-            } else {
-                await fsEl.requestFullscreen()
-            }
-        })
-        fsEl.addEventListener("fullscreenchange", () => this.syncAnim())
-    }
-
-    syncAnim() {
-        this.anim = FullscreenAnims[document.fullscreenElement ? 0 : 1]
-    }
-}
-
-// pause
-
-const playPauseSS = new SpriteSheet(absPath('assets/play_pause.png'), {
-    frameWidth: 50,
-    frameHeight: 50
-})
-
-const PlayPauseAnims = [0, 1].map(i => new Anim(playPauseSS.getFrame(i)))
-
-class PauseBut extends Sprite {
-
-    constructor(...args) {
-        super(...args)
-        this.syncAnim()
-        this.on("click", () => {
-            this.game.pause(!this.game.paused)
-        })
-        this.game.on("pause", () => this.syncAnim())
-    }
-
-    syncAnim() {
-        this.anim = PlayPauseAnims[this.game.paused ? 0 : 1]
     }
 }
 
@@ -523,10 +432,3 @@ ExampleScene.updaters.push(scn => {
         scn.enemyNextTime = scn.time + randge(.3, .7)
     }
 })
-
-// utils
-
-function absPath(relPath){
-    const url = new URL(relPath, import.meta.url)
-    return url.pathname
-}

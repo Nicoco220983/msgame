@@ -63,6 +63,11 @@ export class Pool {
     }
 }
 
+export function absPath(relPath){
+    const url = new URL(relPath, import.meta.url)
+    return url.pathname
+}
+
 // elem
 
 class Elem {
@@ -144,6 +149,7 @@ export class Game extends Elem {
     height = 400
     fps = 60
     dblClickDurarion = .3
+    paused = false
 
     constructor(parentEl, kwargs) {
         super()
@@ -268,6 +274,13 @@ export class Game extends Elem {
             x: (evt.clientX - rect.left) / strech,
             y: (evt.clientY - rect.top) / strech
         }
+    }
+
+    pause(val) {
+        if (val === this.paused) return
+        this.paused = val
+        pauseAudios(val)
+        this.trigger("pause", val)
     }
 }
 
@@ -554,7 +567,6 @@ export class Img extends Image {
 // Audio
 
 export const Audios = []
-export let VolumeLevel = 1
 
 export class Aud extends Audio {
 
@@ -583,7 +595,7 @@ export class Aud extends Audio {
         this.play()
     }
     syncVolume() {
-        this.volume = this.baseVolume * VolumeLevel
+        this.volume = this.baseVolume * Aud.VolumeLevel
     }
     setLoop(val) {
         if(val) {
@@ -605,6 +617,9 @@ export class Aud extends Audio {
     }
 }
 
+Aud.MaxVolumeLevel = 1
+Aud.VolumeLevel = 1
+
 export function pauseAudios(val) {
     Audios.forEach(a => {
         if (val) {
@@ -620,7 +635,7 @@ export function pauseAudios(val) {
 }
 
 export function setVolumeLevel(val) {
-    VolumeLevel = val
+    Aud.VolumeLevel = val
     Audios.forEach(a => a.syncVolume())
 }
 
@@ -838,6 +853,88 @@ export class InputSprite extends HtmlSprite {
     onValue(val) {
         this.value = val
         this.trigger("input", val)
+    }
+}
+
+// volume button
+
+let volumeMuted = false
+
+const volumeSS = new SpriteSheet(absPath('assets/volume.png'), {
+    frameWidth: 50,
+    frameHeight: 50
+})
+
+const VolumeAnims = [0, 1].map(i => new Anim(volumeSS.getFrame(i)))
+
+export class VolumeBut extends Sprite {
+
+    constructor(...args) {
+        super(...args)
+        this.syncAnim()
+        this.on("click", () => {
+            volumeMuted = !volumeMuted
+            setVolumeLevel(volumeMuted ? 0 : 1)
+            this.syncAnim()
+        })
+    }
+    syncAnim() {
+        this.anim = VolumeAnims[volumeMuted ? 1 : 0]
+    }
+}
+
+// fullscreen button
+
+const fullscreenSS = new SpriteSheet(absPath('assets/fullscreen.png'), {
+    frameWidth: 50,
+    frameHeight: 50
+})
+
+const FullscreenAnims = [0, 1].map(i => new Anim(fullscreenSS.getFrame(i)))
+
+export class FullscreenBut extends Sprite {
+
+    constructor(...args) {
+        super(...args)
+        this.syncAnim()
+        const fsEl = this.game.parentEl
+        this.on("click", async () => {
+            if(document.fullscreenElement) {
+                document.exitFullscreen()
+            } else {
+                await fsEl.requestFullscreen()
+            }
+        })
+        fsEl.addEventListener("fullscreenchange", () => this.syncAnim())
+    }
+
+    syncAnim() {
+        this.anim = FullscreenAnims[document.fullscreenElement ? 0 : 1]
+    }
+}
+
+// pause button
+
+const playPauseSS = new SpriteSheet(absPath('assets/play_pause.png'), {
+    frameWidth: 50,
+    frameHeight: 50
+})
+
+const PlayPauseAnims = [0, 1].map(i => new Anim(playPauseSS.getFrame(i)))
+
+export class PauseBut extends Sprite {
+
+    constructor(...args) {
+        super(...args)
+        this.syncAnim()
+        this.on("click", () => {
+            this.game.pause(!this.game.paused)
+        })
+        this.game.on("pause", () => this.syncAnim())
+    }
+
+    syncAnim() {
+        this.anim = PlayPauseAnims[this.game.paused ? 0 : 1]
     }
 }
 
