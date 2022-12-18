@@ -144,7 +144,7 @@ class ExampleScene extends Scene {
         ExampleScene.ongoers.forEach(fn => fn(this))
         const aud = new Aud(absPath('assets/music.mp3'))
         MSG.waitLoads(aud).then(() => aud.replay({ baseVolume: .2, loop: true }))
-        this.once("remove", () => aud.pause())
+        this.once("remove", () => aud.remove())
     }
     finish() {
         this.step = "END"
@@ -255,7 +255,7 @@ const TILE_SIZE = 50
 const TilesAnim = new Anim(absPath('assets/tiles.png'))
 
 ExampleScene.starters.push(scn => {
-    scn.tiler = new _Tiler(scn)
+    scn.tiler = new BackgroundTiler(scn)
     scn.tiler.addNewTiles()
 })
 
@@ -263,20 +263,20 @@ ExampleScene.updaters.push(scn => {
     scn.tiler.addNewTiles()
 })
 
-class Tile extends _Sprite {
+class BackgroundTile extends _Sprite {
     width = TILE_SIZE
     height = TILE_SIZE
     z = -1
     anim = TilesAnim
 }
 
-class _Tiler extends MSG.Tiler {
+class BackgroundTiler extends MSG.Tiler {
 
     tileWidth = TILE_SIZE
     tileHeight = TILE_SIZE
 
     addTile(nx, ny) {
-        this.scene.addSprite(Tile, {
+        this.scene.addSprite(BackgroundTile, {
             x: nx * TILE_SIZE,
             y: ny * TILE_SIZE,
         })
@@ -322,11 +322,11 @@ class Hero extends _Sprite {
             this.applyPlayerControls(dt)
         }
     }
-    inGrace(){
-        return this.time < this.lastDamageTime + DAMAGE_GRACE_TIME
+    isVulnerable(){
+        return this.time >= this.lastDamageTime + DAMAGE_GRACE_TIME
     }
     damage(n) {
-        if(this.inGrace()) return
+        if(!this.isVulnerable()) return
         const scn = this.scene
         scn.score -= n
         scn.addSprite(Notif, {
@@ -346,12 +346,12 @@ class Hero extends _Sprite {
         ouchAud.replay()
     }
     updAnim(dt){
-        if(this.inGrace()) {
-            this.anim = HeroAnims.aouch
-            this.animAlpha = ((this.time - this.lastDamageTime) / .2) % 1 < .5
-        } else {
+        if(this.isVulnerable()) {
             this.anim = HeroAnims.run
             delete this.animAlpha
+        } else {
+            this.anim = HeroAnims.aouch
+            this.animAlpha = ((this.time - this.lastDamageTime) / .2) % 1 < .5
         }
     }
     applyPlayerControls(dt){
@@ -366,9 +366,9 @@ class Hero extends _Sprite {
     getHitBox() {
         const { x, y, width, height } = this.getBoundaries()
         return {
-            x: x + 25,
+            x: x + 10,
             y,
-            width: width - 50,
+            width: width - 20,
             height,
         }
     }

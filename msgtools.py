@@ -27,7 +27,8 @@ def main():
     argp_serve = cmdp.add_parser('compress_audio', help="Compress an audio file by reducing its bitrate")
     argp_serve.add_argument('ipath', type=str, help="Input file")
     argp_serve.add_argument('--opath', type=str, help="Output file. If not defined, the input file path is overwriten.")
-    argp_serve.add_argument('--bitrate', type=str, default="32k", help="Audio bitrate")
+    argp_serve.add_argument('--bitrate', type=str, default="64k", help="Audio bitrate (Example: 64k)")
+    argp_serve.add_argument('--nb_channels', type=int, default="1", help="1 for mono, 2 for stereo")
     argp_serve.set_defaults(func=compress_audio)
 
     argp_serve = cmdp.add_parser('trim_audio', help="Cut audio file, by removing beginning or end.")
@@ -36,6 +37,11 @@ def main():
     argp_serve.add_argument('end', type=str, help="Example: 00:00:10.0")
     argp_serve.add_argument('--opath', type=str, help="Output file. If not defined, the input file path is overwriten.")
     argp_serve.set_defaults(func=trim_audio)
+
+    argp_serve = cmdp.add_parser('only_audio', help="Remove all non-audio streams from a file.")
+    argp_serve.add_argument('ipath', type=str, help="Input file")
+    argp_serve.add_argument('--opath', type=str, help="Output file. If not defined, the input file path is overwriten.")
+    argp_serve.set_defaults(func=only_audio)
 
     argp_serve = cmdp.add_parser('serve')
     argp_serve.add_argument('--port', type=int, default=8080)
@@ -61,16 +67,22 @@ def build_spreadsheet(opath, ipaths, **kwargs):
     subprocess.run(args)
 
 
-def compress_audio(ipath, opath, bitrate, **kwargs):
+def compress_audio(ipath, opath, bitrate, nb_channels, **kwargs):
     backup_file_if_needed(ipath)
     with copy_ifile_if_needed(ipath, opath=opath) as (_ipath, _opath):
-        subprocess.run(["ffmpeg", "-y", "-i", _ipath, "-b:a", bitrate, _opath])
+        subprocess.run(["ffmpeg", "-y", "-i", _ipath, "-b:a", bitrate, "-ac", str(nb_channels), _opath])
     
 
 def trim_audio(ipath, start, end, opath, **kwargs):
     backup_file_if_needed(ipath)
     with copy_ifile_if_needed(ipath, opath=opath) as (_ipath, _opath):
         subprocess.run(["ffmpeg", "-y", "-i", _ipath, "-ss", start, "-t", end, _opath])
+
+
+def only_audio(ipath, opath, **kwargs):
+    backup_file_if_needed(ipath)
+    with copy_ifile_if_needed(ipath, opath=opath) as (_ipath, _opath):
+        subprocess.run(["ffmpeg", "-y", "-i", _ipath, "-map", "0:a", "-c", "copy", _opath])
 
 
 class HttpHandler(http.server.SimpleHTTPRequestHandler):

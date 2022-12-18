@@ -72,32 +72,45 @@ export function absPath(relPath){
 
 class Elem {
 
-    time = 0
+    constructor(kwargs) {
+        this.time = 0
+        if(kwargs) this.set(kwargs)
+    }
+
+    set(state) {
+        assign(this, state)
+    }
 
     start() {}
 
     update(dt) {
         if(this.time === 0) this.start()
         this.time += dt
-        this.trigger("update", dt)
+        if(this._timeEvents) this.applyTimeEvents()
     }
 
     on(evt, callback) {
-        let evts = this._events
-        if (!evts) evts = this._events = {}
-        let callbacks = evts[evt]
-        if (!callbacks) callbacks = evts[evt] = {}
-        if (typeof callback === "function") {
-            for (let i = 0; ; ++i) {
-                const key = "_" + i
-                if (callbacks[key] === undefined) {
-                    callbacks[key] = callback
-                    return
+        if(typeof evt === "string") {
+            let evts = this._events
+            if (!evts) evts = this._events = {}
+            let callbacks = evts[evt]
+            if (!callbacks) callbacks = evts[evt] = {}
+            if (typeof callback === "function") {
+                for (let i = 0; ; ++i) {
+                    const key = "_" + i
+                    if (callbacks[key] === undefined) {
+                        callbacks[key] = callback
+                        return
+                    }
                 }
+            } else if(typeof callback === "object") {
+                for (let key in callback)
+                    callbacks[key] = callback[key]
             }
-        } else {
-            for (let key in callback)
-                callbacks[key] = callback[key]
+        } else if(typeof evt === "number") {
+            let evts = this._timeEvents
+            if (!evts) evts = this._timeEvents = []
+            evts.push([evt + this.time, callback])
         }
     }
 
@@ -126,6 +139,16 @@ class Elem {
         }
     }
 
+    applyTimeEvents() {
+        this._timeEvents = this._timeEvents.filter(([time, callback]) => {
+            if(this.time >= time) {
+                callback()
+                return false
+            }
+            return true
+        })
+    }
+
     remove() {
         if(this.removed) return
         this.removed = true
@@ -133,9 +156,11 @@ class Elem {
     }
 
     every(timeKey, period, fun) {
-        const lastTime = this[timeKey] || 0
+        let lastTimes = this.lastTimes
+        if(!lastTimes) lastTimes = this.lastTimes = {}
+        const lastTime = lastTimes[timeKey] || 0
         if (this.time >= lastTime) {
-            this[timeKey] = lastTime + _mayCall(period)
+            lastTimes[timeKey] = this.time + _mayCall(period)
             fun()
         }
     }
@@ -145,20 +170,21 @@ class Elem {
 
 export class Game extends Elem {
 
-    width = 600
-    height = 400
-    fps = 60
-    dblClickDurarion = .3
-    paused = false
-
-    constructor(parentEl, kwargs) {
-        super()
-        this.parentEl = parentEl
-        if(kwargs) this.set(kwargs)
+    static {
+        assign(this.prototype, {
+            width: 600,
+            height: 400,
+            fps: 60,
+            dblClickDurarion: .3,
+        })
     }
 
-    set(state) {
-        assign(this, state)
+    constructor(parentEl, kwargs) {
+        super({
+            paused: false,
+            ...kwargs
+        })
+        this.parentEl = parentEl
     }
 
     // canvas
@@ -288,22 +314,22 @@ export class Game extends Elem {
 
 export class Scene extends Elem {
 
-    x = 0
-    y = 0
-    viewX = 0
-    viewY = 0
-
     constructor(game, kwargs) {
-        super()
+        super({
+            x: 0,
+            y: 0,
+            viewX: 0,
+            viewY: 0,
+            width: game.width,
+            height: game.height,
+            ...kwargs
+        })
         this.game = game
-        this.width = game.width
-        this.height = game.height
         this.sprites = []
-        if(kwargs) this.set(kwargs)
     }
     set(state) {
         if(state.removed) this.remove()
-        assign(this, state)
+        super.set(state)
     }
     get canvas(){
         if(!this._canvas) {
@@ -370,32 +396,37 @@ export function fillImg(img) {
 
 export class Sprite extends Elem {
 
-    x = 0
-    y = 0
-    z = 0
-    width = 50
-    height = 50
-    angle = 0
-    anchorX = 0
-    anchorY = 0
-    anim = "black"
-    animTime = 0
-    getImgScaleArgs = strechImg
+    static {
+        assign(this.prototype, {
+            z: 0,
+            width: 50,
+            height: 50,
+            anchorX: 0,
+            anchorY: 0,
+            anim: "black",
+            getImgScaleArgs: strechImg,
+        })
+    }
 
     constructor(parent, kwargs) {
-        super()
+        super({
+            x: 0,
+            y: 0,
+            angle: 0,
+            animTime: 0,
+            ...kwargs
+        })
         if(parent instanceof Game) {
             this.game = parent
         } else if(parent instanceof Scene) {
             this.scene = parent
             this.game = parent.game
         }
-        if(kwargs) this.set(kwargs)
     }
 
     set(state) {
         if(state.removed) this.remove()
-        assign(this, state)
+        super.set(state)
     }
 
     getBoundaries() {
@@ -434,27 +465,34 @@ export class Sprite extends Elem {
         if (this.animFlipY) args.flipY = true
         const animAlpha = this.animAlpha
         if (animAlpha !== undefined && animAlpha !== null) args.alpha = this.animAlpha
+        if(this.animCompose) args.compose = this.animCompose
+        if(this.animCall) args.call = this.animCall
         return args
-        //if(this.angle) transArgs = this.getImgAngleArgs(img)
     }
 
     getDefaultAnim() {
-        const color = this.anim
-        const shape = this.animShape || "box"
-        return _getCached(this.__proto__, `dImg:${shape}:${color}`, () => {
+        return _getCached(this.__proto__, `dImg:${this.anim}`, () => {
             const size = 10
-            const can = _createCan(size, size), ctx = _ctx(can)
-            ctx.fillStyle = color
-            if(shape === "box") {
-                ctx.fillRect(0, 0, size, size)
-            } else if(shape === "circle") {
-                ctx.beginPath()
-                ctx.arc(size/2, size/2, size/2, 0, 2*PI, false)
-                ctx.fill()
-            }
+            const can = createCanvasFromStr(size, size, this.anim)
             return new Anim(can)
         })
     }
+}
+
+function createCanvasFromStr(width, height, descStr) {
+    const can = _createCan(width, height), ctx = _ctx(can)
+    const descArgs = descStr.split('_')
+    const color = descArgs[0]
+    const shape = (descArgs.length >= 2) ? descArgs[1] : "box"
+    ctx.fillStyle = color
+    if(shape === "box") {
+        ctx.fillRect(0, 0, width, height)
+    } else if(shape === "circle") {
+        ctx.beginPath()
+        ctx.arc(width/2, height/2, width/2, 0, 2*PI, false)
+        ctx.fill()
+    }
+    return can
 }
 
 // Loads
@@ -513,8 +551,12 @@ export class SpriteSheet {
 
 export class Anim {
 
-    fps = 1
-    loop = true
+    static {
+        assign(this.prototype, {
+            fps: 1,
+            loop: true,
+        })
+    }
 
     constructor(imgs, kwargs) {
         this.imgs = _asArr(imgs).map(img => (typeof img === "string") ? new Img(img) : img)
@@ -529,25 +571,56 @@ export class Anim {
     }
     transformImg(img, kwargs) {
         return _getCached(img, JSON.stringify(kwargs), () => {
+
             let width = kwargs.width || img.width
             let height = kwargs.height || img.height
             const angle = kwargs.angle || 0
+
             let awidth = width, aheight = height
             if(angle) {
                 awidth = abs(cos(angle)) * width + abs(sin(angle)) * height
                 aheight = abs(cos(angle)) * height + abs(sin(angle)) * width
             }
-            const can = _createCan(awidth, aheight), ctx = _ctx(can)
+
+            let can = _createCan(awidth, aheight), ctx = _ctx(can)
+            can.dx = width - awidth
+            can.dy = height - aheight
+
             const alpha = kwargs.alpha
             if(alpha!==undefined && alpha!==null) ctx.globalAlpha = alpha
+
             ctx.translate(awidth/2, aheight/2)
             ctx.scale(kwargs.flipX ? -1 : 1, kwargs.flipY ? -1 : 1)
             ctx.rotate(angle)
             ctx.drawImage(img, -width/2, -height/2, width, height)
-            can.dx = width - awidth
-            can.dy = height - aheight
+            ctx.translate(-awidth/2, -aheight/2)
+
+            if(kwargs.call) {
+                const cans = [can]
+                const ctx = {
+                    getCanvas: idx => (isNaN(parseInt(idx)) ? createCanvasFromStr(awidth, aheight, idx) : cans[idx])
+                }
+                for(let callStr of kwargs.call.split(';')) {
+                    const callArgs = callStr.split(',')
+                    const callFun = Anim.callers[callArgs.shift()]
+                    cans.push(callFun(ctx, ...callArgs))
+                }
+                can = cans[cans.length-1]
+            }
+            
             return can
         })
+    }
+}
+
+Anim.callers = {
+    compose: function(ctx, compKey, sourceCan, compCan) {
+        sourceCan = ctx.getCanvas(sourceCan)
+        compCan = ctx.getCanvas(compCan)
+        const sourceCtx = _ctx(sourceCan)
+        sourceCtx.globalCompositeOperation = compKey
+        sourceCtx.drawImage(compCan, 0, 0, sourceCan.width, sourceCan.height)
+        return sourceCan
     }
 }
 
@@ -570,7 +643,14 @@ export const Audios = []
 
 export class Aud extends Audio {
 
-    baseVolume = 1
+    static MaxVolumeLevel = 1
+    static VolumeLevel = 1
+
+    static {
+        assign(this.prototype, {
+            baseVolume: 1,
+        })
+    }
 
     constructor(src, kwargs) {
         super()
@@ -616,9 +696,6 @@ export class Aud extends Audio {
         if(idx !== -1) Audios.splice(idx, 1)
     }
 }
-
-Aud.MaxVolumeLevel = 1
-Aud.VolumeLevel = 1
 
 export function pauseAudios(val) {
     Audios.forEach(a => {
@@ -768,11 +845,10 @@ export class Text extends Sprite {
 
 export class HtmlSprite extends Sprite {
 
-    anim = null
-
-    constructor(scn, kwargs) {
-        super(scn)
-        if(kwargs) this.set(kwargs)
+    static {
+        assign(this.prototype, {
+            anim: null,
+        })
     }
 
     start(){
@@ -822,8 +898,7 @@ function toHtml(html) {
 export class InputSprite extends HtmlSprite {
 
     constructor(scn, kwargs) {
-        super(scn)
-        this.set({
+        super(scn, {
             html: "<input type='text' />",
             ...kwargs
         })
@@ -942,11 +1017,10 @@ export class PauseBut extends Sprite {
 
 export class Flash extends Sprite {
 
-    ttl = .15
-
-    constructor(scn, kwargs) {
-        super(scn)
-        if(kwargs) this.set(kwargs)
+    static {
+        assign(this.prototype, {
+            ttl: .15,
+        })
     }
 
     update(dt) {
@@ -975,10 +1049,14 @@ export class Flash extends Sprite {
 
 export class Tiler {
 
-    addedMinNx = 1
-    addedMinNy = 1
-    addedMaxNx = 0
-    addedMaxNy = 0
+    static {
+        assign(this.prototype, {
+            addedMinNx: 1,
+            addedMinNy: 1,
+            addedMaxNx: 0,
+            addedMaxNy: 0,
+        })
+    }
 
     constructor(scn, tileWidth, tileHeight) {
         this.scene = scn
