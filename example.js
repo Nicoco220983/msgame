@@ -78,12 +78,35 @@ class ExampleScene extends Scene {
 
     start() {
         super.start()
-        this.step = "START"
+        this.step = "INTRO"
         this.addIntroSprites()
         this.once("click", () => this.ongoing())
         this.initHero()
         ExampleScene.starters.forEach(fn => fn(this))
+        // this.setStep("INTRO")   // TODO
     }
+    // setStep(step) {
+    //     if(step === this.step) return
+    //     this.step = step
+    //     if(step === "INTRO") {
+    //         this.addIntroSprites()
+    //         this.once("click", () => this.setStep("GAME"))
+    //     } else if(step === "GAME") {
+    //         this.sprites.forEach(s => { if(s.isIntro) s.remove() })
+    //         RomblastScene.ongoers.forEach(fn => fn(this))
+    //         this.initHero()
+    //         this.gameMusic = new Aud(absPath('assets/Gigakoops-Revenge_from_Behind_the_Grave.mp3'))
+    //         MSG.waitLoads(this.gameMusic).then(() => this.gameMusic.replay({ baseVolume: .1, loop: true }))
+    //         this.once("remove", () => this.gameMusic.remove())
+    //     } else if(step === "GAMEOVER") {
+    //         this.hero.remove()
+    //         this.addGameoverSprites()
+    //         this.gameMusic.pause()
+    //         this.gameoverMusic = new Aud(absPath('assets/Steve_Combs-Ambient_507050.mp3'))
+    //         MSG.waitLoads(this.gameoverMusic).then(() => this.gameoverMusic.replay({ baseVolume: .2, loop: true }))
+    //         this.once("remove", () => this.gameoverMusic.remove())
+    //     }
+    // }
     initHero(){
         this.hero = this.addSprite(Hero, {
             x: this.width / 2,
@@ -92,7 +115,7 @@ class ExampleScene extends Scene {
     }
     update(dt) {
         super.update(dt)
-        if (this.step == "ONGOING") {
+        if (this.step == "GAME") {
             this.viewY -= RUN_SPD * dt
             ExampleScene.updaters.forEach(fn => fn(this))
             if (this.time > DURATION + 3) this.finish()
@@ -102,8 +125,8 @@ class ExampleScene extends Scene {
         const viewX = this.viewX, viewY = this.viewY, ctx = this.canvas.getContext("2d")
         this.sprites.sort((a, b) => {
             const dz = (a.z - b.z)
-            if(dz !== 0) return dz > 0
-            return (a.y - b.y) > 0
+            if(dz !== 0) return dz
+            return a.y - b.y
         })
         this.sprites.forEach(sprite => {
             if(sprite.removed) return
@@ -139,15 +162,15 @@ class ExampleScene extends Scene {
         })
     }
     ongoing() {
-        if (this.step != "START") return
-        this.step = "ONGOING"
+        if (this.step != "INTRO") return
+        this.step = "GAME"
         ExampleScene.ongoers.forEach(fn => fn(this))
         const aud = new Aud(absPath('assets/music.mp3'))
         MSG.waitLoads(aud).then(() => aud.replay({ baseVolume: .2, loop: true }))
         this.once("remove", () => aud.remove())
     }
     finish() {
-        this.step = "END"
+        this.step = "GAMEOVER"
         this.hero.anim = HeroAnims.happy
         const args = {
             x: WIDTH / 2,
@@ -317,7 +340,7 @@ class Hero extends _Sprite {
     update(dt){
         super.update(dt)
         this.y = HERO_Y + this.scene.viewY
-        if(this.scene.step == "ONGOING") {
+        if(this.scene.step == "GAME") {
             this.updAnim(dt)
             this.applyPlayerControls(dt)
         }
